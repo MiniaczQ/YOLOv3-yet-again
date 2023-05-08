@@ -38,7 +38,6 @@ def load_module(module: nn.Module, weights):
 
 
 def load_param(param, weights):
-    print(f"shape: {param.shape}")
     size = param.numel()
     data = weights[:size]
     param.data.copy_(from_numpy(data).view_as(param))
@@ -57,7 +56,6 @@ def load_conv2d(module: nn.Conv2d, weights):
     if module.bias is not None:  # Required when loading Darknet53 classifier
         total += load_param(module.bias, weights[total:])
     total += load_param(module.weight, weights[total:])
-    print(f"loaded conv {total}")
     return total
 
 
@@ -67,5 +65,4 @@ def load_batch_norm2d(module: nn.BatchNorm2d, weights):
     total += load_param(module.weight, weights[total:])
     total += load_param(module.running_mean, weights[total:])
     total += load_param(module.running_var, weights[total:])
-    print(f"loaded bn {total}")
     return total
