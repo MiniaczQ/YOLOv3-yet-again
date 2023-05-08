@@ -1,8 +1,9 @@
-import numpy as np
 from torchsummary import summary
-from modules import Darknet53, Darknet53Classifier
+from torch import no_grad
+from modules import Darknet53, Darknet53Classifier, YOLOv3
 
 from model_loader import load_model_from_file
+from processing import get_img
 
 
 def main():
@@ -10,24 +11,16 @@ def main():
     # model = Darknet53().cuda()
     file = "darknet53.weights"
     model = Darknet53Classifier().cuda()
+    # model = YOLOv3(2).cuda()
     load_model_from_file(model, file)
 
-    return
-    from PIL import Image
-    from torchvision.transforms import ToTensor, Normalize, Compose
+    img = get_img("n01582220_magpie.jpg")
+    with no_grad():
+        res = model.forward(img)
 
-    transformation = Compose(
-        [ToTensor(), Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
-    )
-    t = (
-        transformation(Image.open("n01582220_magpie.jpg").resize((418, 418)))
-        .cuda()
-        .unsqueeze(0)
-    )
-    res = model.forward(t)
-    print(res.shape)
     res = res.squeeze()
-    print(res.argmax())
+    _, indices = res.sort()
+    print(indices[-10:])
 
 
 if __name__ == "__main__":
