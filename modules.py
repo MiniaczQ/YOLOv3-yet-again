@@ -67,10 +67,11 @@ class Darknet53(nn.Module):
         x = self.conv4(x)
         size1 = self.residuals3(x)
         x = self.conv5(x)
-        size12 = self.residuals4(x)
+        size2 = self.residuals4(x)
         x = self.conv6(x)
-        size13 = self.residuals5(x)
-        return size11, size12, size13
+        size3 = self.residuals5(x)
+        return size1, size2, size3
+
 
 class Darknet53Classifier(nn.Module):
     def __init__(self):
@@ -86,9 +87,9 @@ class Darknet53Classifier(nn.Module):
         self.residuals4 = Darknet53Residuals(512, 256, 8)
         self.conv6 = Darknet53Conv(512, 1024, 3, 2, 1)  # 26x26 -> 13x13
         self.residuals5 = Darknet53Residuals(1024, 512, 4)
-        
-        self.avgpool = nn.AvgPool2d(13) # 13x13 -> 1x1
-        self.conv2d = nn.Conv2d(1024, 1000, 1, 1, 0)
+
+        self.avgpool = nn.AvgPool2d(13)  # 13x13 -> 1x1
+        self.conv7 = nn.Conv2d(1024, 1000, 1, 1, 0)
         self.softmax = nn.Softmax2d()
 
     def forward(self, x):
@@ -103,6 +104,7 @@ class Darknet53Classifier(nn.Module):
         x = self.residuals4(x)
         x = self.conv6(x)
         x = self.residuals5(x)
-        x = self.conv2d(x)
+        x = self.avgpool(x)
+        x = self.conv7(x)
         x = self.softmax(x)
         return x

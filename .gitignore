@@ -161,3 +161,4 @@ cython_debug/
 
 darknet53.conv.74
 darknet53.weights
+*.jpg
