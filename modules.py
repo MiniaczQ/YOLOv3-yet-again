@@ -1,6 +1,8 @@
 from torch import nn, cat
 import torch.nn.functional as F
 
+from model_loader import load_model_from_file
+
 
 class Darknet53Conv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
@@ -81,21 +83,11 @@ class Darknet53(nn.Module):
         x13 = x
         return x52, x26, x13
 
-
-class Darknet53Classifier(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.darknet = Darknet53()
-        self.classifier = nn.Sequential(
-            nn.AvgPool2d(13),  # 13x13 -> 1x1
-            nn.Conv2d(1024, 1000, 1),
-            nn.Softmax(dim=1),
-        )
-
-    def forward(self, x):
-        (_, _, x) = self.darknet(x)
-        x = self.classifier(x)
-        return x
+    @classmethod
+    def from_weights(path):
+        darknet53 = Darknet53()
+        load_model_from_file(darknet53, path)
+        return darknet53
 
 
 class FeaturePyramidConv(nn.Module):
