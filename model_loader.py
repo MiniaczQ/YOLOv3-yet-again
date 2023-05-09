@@ -7,9 +7,7 @@ from modules import Darknet53Conv
 
 def load_model_from_file(model, file):
     with open(file, "rb") as f:
-        np.fromfile(f, dtype=np.int32, count=3)
-        images = np.fromfile(f, dtype=np.int64, count=1)[0]
-        print(f"Model pre-learned with {images} images")
+        np.fromfile(f, dtype=np.int32, count=5)
         weights = np.fromfile(f, dtype=np.float32)
     load_model(model, weights)
 
@@ -57,10 +55,8 @@ def load_conv2d(module: nn.Conv2d, weights):
     total = 0
     if module.bias is not None:  # Required when loading Darknet53 classifier
         total += load_param(module.bias, weights[total:])
-        print(f"convb {total}")
     c = total
     total += load_param(module.weight, weights[total:])
-    print(f"conv {total - c}")
     return total
 
 
@@ -70,5 +66,4 @@ def load_batch_norm2d(module: nn.BatchNorm2d, weights):
     total += load_param(module.weight, weights[total:])
     total += load_param(module.running_mean, weights[total:])
     total += load_param(module.running_var, weights[total:])
-    print(f"bn {total}")
     return total

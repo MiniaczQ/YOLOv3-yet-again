@@ -5,7 +5,7 @@ from torchvision import ops
 
 
 # Squares off the image with padding
-def pad(t: Tensor):
+def square_padding(t: Tensor):
     _, h, w = t.shape
     m = max(h, w)
 
@@ -20,15 +20,15 @@ def pad(t: Tensor):
     return F.pad(t, (lp, rp, tp, bp))
 
 
-# Resizes thhe image to 416x416
-def resize(t: Tensor):
-    return F.interpolate(t.unsqueeze(0), (416, 416), mode="bilinear").squeeze()
+# Unsqueeze
+def unsqueeze_dim0(t: Tensor):
+    return t.unsqueeze(0)
 
 
 # Based on https://blog.paperspace.com/how-to-implement-a-yolo-v3-object-detector-from-scratch-in-pytorch-part-3/
 # Process a batch of predictions from 1 detector
 def process_prediction(
-    bpreds: Tensor, inp_dim, anchors: Tensor, num_classes, device=None
+    bpreds: Tensor, inp_dim: int, anchors: Tensor, num_classes: int, device=None
 ):
     num_anchors = anchors.size(0)
     batch_size = bpreds.size(0)
@@ -48,7 +48,7 @@ def process_prediction(
     # Sigmoid offsets
     bpreds[:, :, :, :, [0, 1]] = torch.sigmoid(bpreds[:, :, :, :, [0, 1]])
     # Sigmoid object confidence and class probabilities
-    bpreds[:, :, :, :, 4:] = torch.sigmoid(bpreds[:, :, :, :, 4])
+    bpreds[:, :, :, :, 4:] = torch.sigmoid(bpreds[:, :, :, :, 4:])
 
     # Offsets 1 x 1 x W x H x 2
     grid = torch.arange(pred_dim, dtype=torch.float32, device=device)
@@ -77,7 +77,9 @@ def process_prediction(
 
 
 # Process a batch of predictions from all 3 detectors
-def process_predictions(bpreds, input_size, anchors, num_classes, device=None):
+def process_predictions(
+    bpreds: Tensor, input_size: int, anchors: Tensor, num_classes: int, device=None
+):
     (bx52, bx26, bx13) = bpreds
     bx52 = process_prediction(bx52, input_size, anchors[[0, 1, 2]], num_classes, device)
     bx26 = process_prediction(bx26, input_size, anchors[[3, 4, 5]], num_classes, device)
@@ -86,25 +88,38 @@ def process_predictions(bpreds, input_size, anchors, num_classes, device=None):
 
 
 # Filter away predictions with low object score
-def threshold_object_confidence(preds: Tensor, oc_threshold):
+def threshold_object_confidence(preds: Tensor, oc_threshold: float):
     mask = preds[:, 4] > oc_threshold
     return preds[mask, :]
 
 
 # Turn predictions into AABB with class index
-def process_with_nms(preds: Tensor, iou_threshold):
-    classes = torch.argmax(preds[:, 5:], dim=1)
-    indices = ops.nms(preds[:, [0, 1, 2, 3]], preds[:, 5:], iou_threshold)
-    boxes = preds[indices, [0, 1, 2, 3]]
-    return torch.stack([boxes, classes], dim=1)
+def process_with_nms(preds: Tensor, num_classes: int, iou_threshold: float):
+    boxes = preds[:, [0, 1, 2, 3]]
+    correct_boxes = []
+    for class_id in torch.arange(num_classes):
+        scores = preds[:, 5 + class_id]
+        curr_keep_indices = ops.nms(boxes, scores, iou_threshold)
+        num_kept = len(curr_keep_indices)
+        kept_boxes = boxes[curr_keep_indices, :]
+        kept_scores = scores[curr_keep_indices].view(-1, 1)
+        class_ids = torch.tensor(class_id).view(1, 1).repeat(num_kept, 1)
+        correct_boxes.append(torch.cat([kept_boxes, class_ids, kept_scores], 1))
+    return torch.cat(correct_boxes, 0)
 
 
 # Processes a batch of predictions into a batch of bounding boxes with class indices
 def process_into_aabbs(
-    bpreds, input_size, anchors, num_classes, oc_threshold, iou_threshold, device=None
+    bpreds: Tensor,
+    input_size: int,
+    anchors: Tensor,
+    num_classes: int,
+    oc_threshold: float,
+    iou_threshold: float,
+    device=None,
 ):
     bpreds = process_predictions(bpreds, input_size, anchors, num_classes, device)
     for preds in bpreds:
         preds = threshold_object_confidence(preds, oc_threshold)
-        preds = process_with_nms(preds, iou_threshold)
-        yield preds
+        preds = process_with_nms(preds, num_classes, iou_threshold)
+        return preds

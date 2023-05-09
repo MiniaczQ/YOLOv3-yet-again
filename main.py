@@ -1,18 +1,25 @@
-from torchsummary import summary
-from torch import no_grad
-from modules import YOLOv3
+from lightning import Trainer
+import torch
+from datamodule import Datamodule
+from torch.utils.data import DataLoader, Dataset
 
-from model_loader import load_model_from_file
-from processing import get_img
+from yolov3 import YoloV3Module
 
 
 def main():
-    model = YOLOv3(2).cuda()
-    load_model_from_file(model.backbone, "pretrained/darknet53.conv.74")
-
-    img = get_img("testimgs/n01582220_magpie.jpg")
-    with no_grad():
-        res = model.forward(img)
+    torch.set_float32_matmul_precision("medium")
+    trainer = Trainer(
+        auto_scale_batch_size=False, accelerator="cpu", devices=1, logger=False
+    )
+    model = YoloV3Module()
+    dm = Datamodule()
+    dm.batch_size = 1
+    dm.prepare_data()
+    dm.setup()
+    dl = dm.test_dataloader(1)
+    img, labels = next(iter(dl))
+    dl = DataLoader(img, 1, False)
+    trainer.predict(model, dl)
 
 
 if __name__ == "__main__":

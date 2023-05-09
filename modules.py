@@ -2,8 +2,6 @@ import torch
 from torch import nn, cat
 import torch.nn.functional as F
 
-from model_loader import load_model_from_file
-
 
 class Darknet53Conv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):

@@ -11,7 +11,9 @@ from processing import process_into_aabbs, process_with_nms, process_prediction
 class YoloV3Module(pl.LightningModule):
     input_size = 416
 
-    def __init__(self, num_classes, anchors: Tensor | None = None, learning_rate=1e-3):
+    def __init__(
+        self, num_classes=2, anchors: Tensor | None = None, learning_rate=1e-3
+    ):
         super().__init__()
         self.save_hyperparameters()
         self.learning_rate = learning_rate
@@ -27,13 +29,12 @@ class YoloV3Module(pl.LightningModule):
                 [116, 90],
                 [156, 198],
                 [373, 326],
-            ]
+            ],
+            dtype=torch.float32,
         )
 
         self.model = YOLOv3(num_classes)
         load_model_from_file(self.model.backbone, "pretrained/darknet53.conv.74")
-        for param in self.model.backbone.parameters():
-            param.requires_grad = False
 
     def forward(self, x):
         return self.model(x)
@@ -117,10 +118,10 @@ class YoloV3Module(pl.LightningModule):
         baabbs = process_into_aabbs(
             bpreds,
             self.input_size,
-            self.anchors[[0, 1, 2]],
+            self.anchors,
             self.num_classes,
             0.7,
-            0.7,
+            0.2,
             self.device,
         )
         for aabbs in baabbs:
