@@ -5,6 +5,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+
 class YoloV3Module(pl.LightningModule):
     def __init__(self, num_classes, learning_rate=1e-3):
         super().__init__()
@@ -21,7 +22,9 @@ class YoloV3Module(pl.LightningModule):
         return self.model(x)
 
     # based on: https://towardsdatascience.com/calculating-loss-of-yolo-v3-layer-8878bfaaf1ff
-    def _process_annotations(self, annotations: torch.Tensor, output_size: torch.Size) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _process_annotations(
+        self, annotations: torch.Tensor, output_size: torch.Size
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         grid_size = output_size[1]
         assert output_size[1] == output_size[2]
         obj_mask = torch.zeros(output_size[:-1], dtype=torch.bool, device=self.device)
@@ -38,22 +41,32 @@ class YoloV3Module(pl.LightningModule):
         return (processed, obj_mask, noobj_mask, class_mask, iou_scores)
 
     # based on: https://towardsdatascience.com/calculating-loss-of-yolo-v3-layer-8878bfaaf1ff
-    def _compute_loss(self, predicted: torch.Tensor, expected: torch.Tensor) -> torch.Tensor:
-        mask_obj = torch.ones_like(predicted[..., 0], dtype=torch.bool, device=self.device)
+    def _compute_loss(
+        self, predicted: torch.Tensor, expected: torch.Tensor
+    ) -> torch.Tensor:
+        mask_obj = torch.ones_like(
+            predicted[..., 0], dtype=torch.bool, device=self.device
+        )
         loss_x, loss_y, loss_w, loss_h = (
             F.mse_loss(predicted[..., i][mask_obj], expected[..., i][mask_obj])
-            for i
-            in range(4)
+            for i in range(4)
         )
         # magic numbers - honestly I don't know what they mean yet
         scale_loss_obj = [1, 100]  # magic numbers for obj and noobj
-        loss_obj = torch.tensor([
-            scale * F.binary_cross_entropy(predicted[..., 4][mask], expected[..., 4][mask])
-            for mask, scale
-            in zip((mask_obj, ~mask_obj), scale_loss_obj)
-        ], device=self.device).sum()
+        loss_obj = torch.tensor(
+            [
+                scale
+                * F.binary_cross_entropy(
+                    predicted[..., 4][mask], expected[..., 4][mask]
+                )
+                for mask, scale in zip((mask_obj, ~mask_obj), scale_loss_obj)
+            ],
+            device=self.device,
+        ).sum()
         loss_cls = F.binary_cross_entropy(predicted[..., 5:], expected[..., 5:])
-        return torch.tensor([loss_x, loss_y, loss_w, loss_h, loss_obj, loss_cls], device=self.device).sum()
+        return torch.tensor(
+            [loss_x, loss_y, loss_w, loss_h, loss_obj, loss_cls], device=self.device
+        ).sum()
 
     def training_step(self, batch: torch.Tensor, batch_idx):
         # input: transformed image
@@ -61,14 +74,18 @@ class YoloV3Module(pl.LightningModule):
         #     where (x, y): center, (w, h): size, [0..1] wrt width or height
         input, annotations = batch
         loss, processed_annotations = {}, {}
-        heads = ('x52', 'x26', 'x13')
+        heads = ("x52", "x26", "x13")
         # outputs: Size([3, grid_size, grid_size, (4 + 1 + num_classes)]) for each head
         outputs = dict(zip(heads, self(input)))
         for head, head_outputs in outputs.items():
             # using sigmoid to ensure [0..1] for x, y, objectness and per-class probabilities
             trunc_idx = [0, 1, 4] + list(range(5, 5 + self.num_classes))
-            head_outputs[:, :, :, trunc_idx] = torch.sigmoid(head_outputs[:, :, :, trunc_idx])
-            processed_annotations[head] = self._process_annotations(annotations, head_outputs.shape)
+            head_outputs[:, :, :, trunc_idx] = torch.sigmoid(
+                head_outputs[:, :, :, trunc_idx]
+            )
+            processed_annotations[head] = self._process_annotations(
+                annotations, head_outputs.shape
+            )
             loss[head] = self._compute_loss(head_outputs, processed_annotations[head])
         return loss, outputs, processed_annotations
 
@@ -77,7 +94,9 @@ class YoloV3Module(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         pass  # TODO
-        
+
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.parameters(), lr=self.learning_rate, weight_decay=10e-4)
+        optimizer = torch.optim.SGD(
+            self.parameters(), lr=self.learning_rate, weight_decay=10e-4
+        )
         return optimizer

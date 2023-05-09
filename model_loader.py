@@ -34,7 +34,7 @@ def load_module(name, module: nn.Module, weights):
         case module:
             for subname, submodule in module.named_children():
                 subname = f"{name}.{subname}"
-                #print(f"Loading {subname}")
+                # print(f"Loading {subname}")
                 total += load_module(subname, submodule, weights[total:])
     return total
 

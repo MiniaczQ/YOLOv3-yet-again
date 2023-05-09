@@ -168,7 +168,9 @@ class YOLOv3(nn.Module):
         super().__init__()
         self.backbone = Darknet53()
         self.neck = FeaturePyramid()
-        self.head1 = YOLOv3Detector(512, num_classes, [[116, 90], [156, 198], [373, 326]])
+        self.head1 = YOLOv3Detector(
+            512, num_classes, [[116, 90], [156, 198], [373, 326]]
+        )
         self.head2 = YOLOv3Detector(256, num_classes, [[30, 61], [62, 45], [59, 119]])
         self.head3 = YOLOv3Detector(128, num_classes, [[10, 13], [16, 30], [33, 23]])
 
