@@ -86,11 +86,12 @@ class Darknet53(nn.Module):
 class FeaturePyramidConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
+        mid_chahnnels = out_channels * 2
         self.conv1 = Darknet53Conv(in_channels, out_channels, 1)
-        self.conv2 = Darknet53Conv(out_channels, in_channels)
-        self.conv3 = Darknet53Conv(in_channels, out_channels, 1)
-        self.conv4 = Darknet53Conv(out_channels, in_channels)
-        self.conv5 = Darknet53Conv(in_channels, out_channels, 1)
+        self.conv2 = Darknet53Conv(out_channels, mid_chahnnels)
+        self.conv3 = Darknet53Conv(mid_chahnnels, out_channels, 1)
+        self.conv4 = Darknet53Conv(out_channels, mid_chahnnels)
+        self.conv5 = Darknet53Conv(mid_chahnnels, out_channels, 1)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -102,16 +103,11 @@ class FeaturePyramidConv(nn.Module):
 
 
 class YOLOv3Head(nn.Module):
-    def __init__(self, in_channels: int, num_classes: int, anchors):
+    def __init__(self, in_channels: int, num_classes: int):
         super().__init__()
         mid_channels = in_channels * 2
         self.conv1 = Darknet53Conv(in_channels, mid_channels)
         self.conv2 = nn.Conv2d(mid_channels, (5 + num_classes) * 3, 1)
-        self.anchors = torch.tensor(anchors)
-        assert self.anchors.shape == torch.Size([3, 2])
-        grid_side = (512 * 13) // in_channels
-        self.grid_side = grid_side
-        self.stride = 416 // grid_side
 
     def forward(self, x):
         x = self.conv1(x)
@@ -122,7 +118,7 @@ class YOLOv3Head(nn.Module):
 class FeaturePyramidUpsample(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
-        self.conv = Darknet53Conv(in_channels, in_channels // 2, 3)
+        self.conv = Darknet53Conv(in_channels, in_channels // 2, 1)
 
     def forward(self, x):
         x = self.conv(x)
@@ -160,13 +156,13 @@ class YOLOv3(nn.Module):
         super().__init__()
         self.backbone = Darknet53()
         self.neck = FeaturePyramid()
-        self.head1 = YOLOv3Head(512, num_classes, [[116, 90], [156, 198], [373, 326]])
-        self.head2 = YOLOv3Head(256, num_classes, [[30, 61], [62, 45], [59, 119]])
-        self.head3 = YOLOv3Head(128, num_classes, [[10, 13], [16, 30], [33, 23]])
+        self.head1 = YOLOv3Head(512, num_classes)
+        self.head2 = YOLOv3Head(256, num_classes)
+        self.head3 = YOLOv3Head(128, num_classes)
 
     def forward(self, x):
-        x = self.backbone(x)
-        (x52, x26, x13) = self.neck(x)
+        (x52, x26, x13) = self.backbone(x)
+        (x52, x26, x13) = self.neck((x52, x26, x13))
         x13 = self.head1(x13)
         x26 = self.head2(x26)
         x52 = self.head3(x52)

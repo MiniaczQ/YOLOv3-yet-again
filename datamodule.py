@@ -4,7 +4,8 @@ from torchvision import transforms
 from torch import Generator
 from pklot_dataset import PkLotDataset
 
-from processing import square_padding, unsqueeze_dim0
+from processing import square_padding
+import pklot_preprocessor
 
 
 class Datamodule(pl.LightningDataModule):
@@ -14,7 +15,7 @@ class Datamodule(pl.LightningDataModule):
         self.img_size = (416, 416)
 
     def prepare_data(self):
-        pass  # TODO maybe
+        pklot_preprocessor.preprocess("data/pklot")
 
     def setup(self, stage=None, train_val_seed=2136, test_seed=2136):
         pklot_dataset = PkLotDataset("data/pklot", self.get_transform())
@@ -35,6 +36,7 @@ class Datamodule(pl.LightningDataModule):
             shuffle=True,
             pin_memory=True,
             num_workers=num_workers,
+            collate_fn=lambda x: x,
         )
 
     def test_dataloader(self, num_workers=2):
@@ -44,6 +46,7 @@ class Datamodule(pl.LightningDataModule):
             shuffle=False,
             pin_memory=True,
             num_workers=num_workers,
+            collate_fn=lambda x: x,
         )
 
     def val_dataloader(self, num_workers=2):
@@ -53,6 +56,7 @@ class Datamodule(pl.LightningDataModule):
             shuffle=False,
             pin_memory=True,
             num_workers=num_workers,
+            collate_fn=lambda x: x,
         )
 
     def get_transform(self):

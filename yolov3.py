@@ -34,7 +34,8 @@ class YoloV3Module(pl.LightningModule):
         )
 
         self.model = YOLOv3(num_classes)
-        load_model_from_file(self.model.backbone, "pretrained/darknet53.conv.74")
+        # load_model_from_file(self.model.backbone, "pretrained/darknet53.conv.74")
+        load_model_from_file(self.model, "pretrained/yolov3.weights")
 
     def forward(self, x):
         return self.model(x)
@@ -118,14 +119,13 @@ class YoloV3Module(pl.LightningModule):
         baabbs = process_into_aabbs(
             bpreds,
             self.input_size,
-            self.anchors,
+            self.anchors.to(self.device),
             self.num_classes,
-            0.7,
-            0.2,
+            0.5,
+            0.5,
             self.device,
         )
-        for aabbs in baabbs:
-            print(aabbs)
+        return list(baabbs)
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(

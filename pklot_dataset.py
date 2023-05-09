@@ -2,60 +2,37 @@ from torch.utils.data import Dataset
 from PIL import Image
 from pathlib import Path
 import xml.etree.ElementTree as ET
-
-
-def _iter_points(points):
-    for point in points:
-        x = point.attrib["x"]
-        y = point.attrib["y"]
-        yield (x, y)
-
-
-def _iter_spaces(spaces):
-    for space in spaces:
-        occupied = space.attrib["occupied"]
-        points = list(_iter_points(space.find("contour").iterfind("point")))
-        yield (occupied, points)
+import torch
 
 
 class PkLotDataset(Dataset):
     def __init__(self, root, img_transform=None, ann_transform=None):
         self.root = Path(root)
-        self.image_paths = list(self.root.rglob("*.jpg"))
+        self.ann_paths = list(self.root.rglob("*.data"))
         self.img_transform = img_transform
         self.ann_transform = ann_transform
 
     def __getitem__(self, i):
-        image_path = self.image_paths[i]
-        image = Image.open(image_path).convert("RGB")
+        data_paths = self.ann_paths[i]
+        img = Image.open(data_paths.with_suffix(".jpg")).convert("RGB")
         if self.img_transform is not None:
-            image = self.img_transform(image)
+            img = self.img_transform(img)
 
-        annotations_path = image_path.with_suffix(".xml")
-        annotations_xml = ET.parse(annotations_path)
-        annotations = list(_iter_spaces(annotations_xml.iterfind("space")))
+        ann = torch.load(data_paths)
         if self.ann_transform is not None:
-            annotations = self.ann_transform(annotations)
+            ann = self.ann_transform(ann)
 
-        return image, annotations
+        return img, ann
 
     def __len__(self):
-        return len(self.image_paths)
-
-    # def __repr__(self) -> str:
-    #    format_string = f"{self.__class__.__name__}(root={self.root}"
-    #    if self.img_transform is not None:
-    #        format_string += f"img_transform={self.img_transform.__repr__()}"
-    #    if self.ann_transform is not None:
-    #        format_string += f"ann_transform={self.ann_transform.__repr__()}"
-    #    format_string += ")"
-    #    return format_string
+        return len(self.ann_paths)
 
 
 def main():
     ds = PkLotDataset("data/pklot")
     print(len(ds))
-    print(ds[0])
+    for i in range(len(ds)):
+        ds[i]
 
 
 if __name__ == "__main__":

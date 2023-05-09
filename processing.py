@@ -78,7 +78,7 @@ def process_prediction(
 
 # Process a batch of predictions from all 3 detectors
 def process_predictions(
-    bpreds: Tensor, input_size: int, anchors: Tensor, num_classes: int, device=None
+    bpreds, input_size: int, anchors: Tensor, num_classes: int, device=None
 ):
     (bx52, bx26, bx13) = bpreds
     bx52 = process_prediction(bx52, input_size, anchors[[0, 1, 2]], num_classes, device)
@@ -103,14 +103,16 @@ def process_with_nms(preds: Tensor, num_classes: int, iou_threshold: float):
         num_kept = len(curr_keep_indices)
         kept_boxes = boxes[curr_keep_indices, :]
         kept_scores = scores[curr_keep_indices].view(-1, 1)
-        class_ids = torch.tensor(class_id).view(1, 1).repeat(num_kept, 1)
+        class_ids = (
+            torch.tensor(class_id, device=preds.device).view(1, 1).repeat(num_kept, 1)
+        )
         correct_boxes.append(torch.cat([kept_boxes, class_ids, kept_scores], 1))
     return torch.cat(correct_boxes, 0)
 
 
 # Processes a batch of predictions into a batch of bounding boxes with class indices
 def process_into_aabbs(
-    bpreds: Tensor,
+    bpreds,
     input_size: int,
     anchors: Tensor,
     num_classes: int,
@@ -119,7 +121,12 @@ def process_into_aabbs(
     device=None,
 ):
     bpreds = process_predictions(bpreds, input_size, anchors, num_classes, device)
+    print(bpreds.shape)
     for preds in bpreds:
+        print()
+        print(preds.shape)
         preds = threshold_object_confidence(preds, oc_threshold)
+        print(preds.shape)
         preds = process_with_nms(preds, num_classes, iou_threshold)
-        return preds
+        print(preds.shape)
+        yield preds
