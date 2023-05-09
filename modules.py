@@ -1,3 +1,4 @@
+import torch
 from torch import nn, cat
 import torch.nn.functional as F
 
@@ -109,11 +110,16 @@ class FeaturePyramidConv(nn.Module):
 
 
 class YOLOv3Detector(nn.Module):
-    def __init__(self, in_channels, num_classes):
+    def __init__(self, in_channels: int, num_classes: int, anchors):
         super().__init__()
         mid_channels = in_channels * 2
         self.conv1 = Darknet53Conv(in_channels, mid_channels)
         self.conv2 = nn.Conv2d(mid_channels, (5 + num_classes) * 3, 1)
+        self.anchors = torch.tensor(anchors)
+        assert self.anchors.shape == torch.Size([3, 2])
+        grid_side = (512 * 13) // in_channels
+        self.grid_side = grid_side
+        self.stride = 416 // grid_side
 
     def forward(self, x):
         x = self.conv1(x)
@@ -158,13 +164,13 @@ class FeaturePyramid(nn.Module):
 
 
 class YOLOv3(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes: int):
         super().__init__()
         self.backbone = Darknet53()
         self.neck = FeaturePyramid()
-        self.head1 = YOLOv3Detector(512, num_classes)
-        self.head2 = YOLOv3Detector(256, num_classes)
-        self.head3 = YOLOv3Detector(128, num_classes)
+        self.head1 = YOLOv3Detector(512, num_classes, [[116, 90], [156, 198], [373, 326]])
+        self.head2 = YOLOv3Detector(256, num_classes, [[30, 61], [62, 45], [59, 119]])
+        self.head3 = YOLOv3Detector(128, num_classes, [[10, 13], [16, 30], [33, 23]])
 
     def forward(self, x):
         x = self.backbone(x)
