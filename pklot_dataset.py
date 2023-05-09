@@ -18,17 +18,26 @@ def _iter_spaces(spaces):
         yield (occupied, points)
 
 
+identity = lambda x: x
+
+
 class PkLotDataset(Dataset):
-    def __init__(self, root):
+    def __init__(self, root, img_transform=None, ann_transform=None):
         self.root = Path(root)
         self.image_paths = list(self.root.rglob("*.jpg"))
+        self.img_transform = img_transform or identity
+        self.ann_transform = ann_transform or identity
 
     def __getitem__(self, i):
         image_path = self.image_paths[i]
+        image = Image.open(image_path).convert("RGB")
+        image = self.img_transform(image)
+
         annotations_path = image_path.with_suffix(".xml")
         annotations_xml = ET.parse(annotations_path)
         annotations = list(_iter_spaces(annotations_xml.iterfind("space")))
-        image = Image.open(image_path).convert("RGB")
+        annotations = self.ann_transform(annotations)
+
         return image, annotations
 
     def __len__(self):

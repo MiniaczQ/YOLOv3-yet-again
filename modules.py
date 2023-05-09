@@ -84,12 +84,6 @@ class Darknet53(nn.Module):
         x13 = x
         return x52, x26, x13
 
-    @classmethod
-    def from_weights(path):
-        darknet53 = Darknet53()
-        load_model_from_file(darknet53, path)
-        return darknet53
-
 
 class FeaturePyramidConv(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -109,7 +103,7 @@ class FeaturePyramidConv(nn.Module):
         return x
 
 
-class YOLOv3Detector(nn.Module):
+class YOLOv3Head(nn.Module):
     def __init__(self, in_channels: int, num_classes: int, anchors):
         super().__init__()
         mid_channels = in_channels * 2
@@ -168,11 +162,9 @@ class YOLOv3(nn.Module):
         super().__init__()
         self.backbone = Darknet53()
         self.neck = FeaturePyramid()
-        self.head1 = YOLOv3Detector(
-            512, num_classes, [[116, 90], [156, 198], [373, 326]]
-        )
-        self.head2 = YOLOv3Detector(256, num_classes, [[30, 61], [62, 45], [59, 119]])
-        self.head3 = YOLOv3Detector(128, num_classes, [[10, 13], [16, 30], [33, 23]])
+        self.head1 = YOLOv3Head(512, num_classes, [[116, 90], [156, 198], [373, 326]])
+        self.head2 = YOLOv3Head(256, num_classes, [[30, 61], [62, 45], [59, 119]])
+        self.head3 = YOLOv3Head(128, num_classes, [[10, 13], [16, 30], [33, 23]])
 
     def forward(self, x):
         x = self.backbone(x)
