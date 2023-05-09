@@ -1,6 +1,6 @@
 from model_loader import load_model_from_file
 from modules import YOLOv3
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from torch import nn
 import torch.nn.functional as F
