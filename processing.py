@@ -1,23 +1,39 @@
 from torch import Tensor
 import torch.nn.functional as F
+import torchvision.transforms.functional as TF
 import torch
 from torchvision import ops
 
 
 # Squares off the image with padding
-def square_padding(t: Tensor) -> Tensor:
-    _, h, w = t.shape
-    m = max(h, w)
+class PadToSquare:
+    def __call__(self, t: Tensor) -> Tensor:
+        _, h, w = t.shape
+        m = max(h, w)
 
-    dw = m - w
-    lp = dw // 2
-    rp = dw - lp
+        dw = m - w
+        lp = dw // 2
+        rp = dw - lp
 
-    dh = m - h
-    tp = dh // 2
-    bp = dh - tp
+        dh = m - h
+        tp = dh // 2
+        bp = dh - tp
 
-    return F.pad(t, (lp, rp, tp, bp))
+        return F.pad(t, (lp, rp, tp, bp))
+
+
+# Downsizes the image to fit inside max_size, while keeping the aspect ratio
+class ResizeKeepRatio:
+    def __init__(self, max_size):
+        self.max_size = max_size
+
+    def __call__(self, t: Tensor) -> Tensor:
+        _, h, w = t.shape
+        ratio = self.max_size / max(h, w)
+
+        h = int(round(h * ratio))
+        w = int(round(w * ratio))
+        return TF.resize(t, [h, w], TF.InterpolationMode.BILINEAR)
 
 
 # Scale bboxes in annotations
@@ -73,11 +89,11 @@ def normalize_model_output(bpreds: Tensor, num_anchors: int, bbox_attrs: int) ->
     batch_size = bpreds.size(0)
     pred_dim = bpreds.size(2)
 
-    # B x A*(5+N) x W x H
+    # B x A*(5+N) x H x W
     bpreds = bpreds.view(batch_size, num_anchors, bbox_attrs, pred_dim, pred_dim)
-    # B x A x (5+N) x W x H
+    # B x A x (5+N) x H x W
     bpreds = bpreds.permute(0, 1, 3, 4, 2)
-    # B x A x W x H x (5+N)
+    # B x A x H x W x (5+N)
 
     # Sigmoid offsets
     bpreds[..., [0, 1]] = torch.sigmoid(bpreds[..., [0, 1]])
@@ -87,9 +103,11 @@ def normalize_model_output(bpreds: Tensor, num_anchors: int, bbox_attrs: int) ->
     return bpreds
 
 
-# Based on https://blog.paperspace.com/how-to-implement-a-yolo-v3-object-detector-from-scratch-in-pytorch-part-3/
+# Based on
+# https://blog.paperspace.com/how-to-implement-a-yolo-v3-object-detector-from-scratch-in-pytorch-part-3/
+# https://github.com/Lornatang/YOLOv3-PyTorch/tree/main
 # Process a batch of predictions from 1 detector
-def process_prediction(
+def process_anchor(
     bpreds: Tensor, inp_dim: int, anchors: Tensor, num_classes: int
 ) -> Tensor:
     num_anchors = anchors.size(0)
@@ -97,31 +115,22 @@ def process_prediction(
     pred_dim = bpreds.size(2)
     bbox_attrs = 5 + num_classes
 
+    # Sigmoid & transform to B x A x H x W x (5+N) representation
     bpreds = normalize_model_output(bpreds, num_anchors, bbox_attrs)
 
-    # Offsets 1 x 1 x W x H x 2
-    grid = torch.arange(pred_dim, dtype=torch.float32, device=bpreds.device)
-    xy_offsets = torch.cartesian_prod(grid, grid).view(1, 1, pred_dim, pred_dim, 2)
+    # Position
+    grid_axis = torch.arange(pred_dim, dtype=torch.float32, device=bpreds.device)
+    grid = torch.cartesian_prod(grid_axis, grid_axis).view(1, 1, pred_dim, pred_dim, 2)
+    bpreds[..., [0, 1]] += grid
 
-    # Add offsets
-    bpreds[..., [0, 1]] += xy_offsets
-
-    # Scale down anchors
+    # Size
     scale = inp_dim // pred_dim
     anchors /= scale
-
-    # Scale 1 x A x 1 x 1 x 2
     anchors = anchors.view(1, num_anchors, 1, 1, 2)
-
-    # Calculate size
-    bpreds[..., [2, 3]] = torch.exp(bpreds[..., [2, 3]])
-    bpreds[..., [2, 3]] *= anchors
+    bpreds[..., [2, 3]] = torch.exp(bpreds[..., [2, 3]]) * anchors
 
     # Upscale
     bpreds[..., [0, 1, 2, 3]] *= scale
-
-    # Calculate coordinates
-    bpreds[..., [2, 3]] += bpreds[..., [1, 2]]
 
     # If we want a perfect result match with the tutorial, we need to use the exact same order before reducing dimensions
     # In practice, all anchor, width and height relevant information are already inside the attributes, so we don't need to keep them in any specific order
@@ -130,17 +139,6 @@ def process_prediction(
     # Reduce dimensions
     bpreds = bpreds.reshape(batch_size, -1, bbox_attrs)
     return bpreds
-
-
-# Process a batch of predictions from all 3 detectors
-def process_predictions(
-    bpreds, input_size: int, anchors: Tensor, num_classes: int
-) -> Tensor:
-    (bx52, bx26, bx13) = bpreds
-    bx52 = process_prediction(bx52, input_size, anchors[[0, 1, 2]], num_classes)
-    bx26 = process_prediction(bx26, input_size, anchors[[3, 4, 5]], num_classes)
-    bx13 = process_prediction(bx13, input_size, anchors[[6, 7, 8]], num_classes)
-    return torch.cat([bx52, bx26, bx13], dim=1)
 
 
 # Filter away predictions with low objectness score
@@ -169,20 +167,10 @@ def batched_nms(preds: Tensor, iou_threshold: float) -> Tensor:
     return preds
 
 
-# Processes a batch of predictions into a batch of bounding boxes with class indices
-def process_into_aabbs(
-    bpreds,
-    input_size: int,
-    anchors: Tensor,
-    num_classes: int,
-    oc_threshold: float,
-    iou_threshold: float,
-) -> list:
-    results = []
-    bpreds = process_predictions(bpreds, input_size, anchors, num_classes)
-    for preds in bpreds:
-        preds = threshold_objectness(preds, oc_threshold)
-        preds = keep_best_class(preds)
-        preds = batched_nms(preds, iou_threshold)
-        results.append(preds)
-    return results
+# Convert center_x, center_y, width, height to rectangles
+def xywh_to_rect(xywhs: Tensor):
+    rects = xywhs.clone()
+    rects[..., [2, 3]] /= 2
+    rects[..., [0, 1]] = xywhs[..., [0, 1]] - rects[..., [2, 3]]
+    rects[..., [2, 3]] = xywhs[..., [0, 1]] + rects[..., [2, 3]]
+    return rects

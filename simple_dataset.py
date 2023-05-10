@@ -4,7 +4,7 @@ from pathlib import Path
 
 from torchvision import transforms
 
-from processing import square_padding
+from processing import ResizeKeepRatio, PadToSquare
 
 
 class SimpleDataset(Dataset):
@@ -15,8 +15,8 @@ class SimpleDataset(Dataset):
             [
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-                square_padding,
-                transforms.Resize(416, antialias=False),
+                ResizeKeepRatio(416),
+                PadToSquare(),
             ]
         )
 

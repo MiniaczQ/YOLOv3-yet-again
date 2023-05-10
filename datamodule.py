@@ -6,7 +6,7 @@ from torchvision import transforms
 from torch import Generator
 from pklot_dataset import PkLotDataset
 
-from processing import square_padding, NormalizeBbox
+from processing import PadToSquare, ResizeKeepRatio, NormalizeBbox
 import pklot_preprocessor
 
 
@@ -21,8 +21,8 @@ class Datamodule(pl.LightningDataModule):
             [
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-                square_padding,
-                transforms.Resize(self.img_size[0], antialias=False),
+                ResizeKeepRatio(416),
+                PadToSquare(),
             ]
         )
         self.ann_transform = transforms.Compose([NormalizeBbox(self.unscaled_size)])
