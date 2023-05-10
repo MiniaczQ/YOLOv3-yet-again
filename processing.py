@@ -24,8 +24,9 @@ class PadToSquare:
 
 # Downsizes the image to fit inside max_size, while keeping the aspect ratio
 class ResizeKeepRatio:
-    def __init__(self, max_size):
+    def __init__(self, max_size, antialias=False):
         self.max_size = max_size
+        self.antialias = antialias
 
     def __call__(self, t: Tensor) -> Tensor:
         _, h, w = t.shape
@@ -33,7 +34,9 @@ class ResizeKeepRatio:
 
         h = int(round(h * ratio))
         w = int(round(w * ratio))
-        return TF.resize(t, [h, w], TF.InterpolationMode.BILINEAR)
+        return TF.resize(
+            t, [h, w], TF.InterpolationMode.BILINEAR, antialias=self.antialias
+        )
 
 
 # Scale bboxes in annotations

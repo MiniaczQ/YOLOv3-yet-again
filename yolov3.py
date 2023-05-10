@@ -28,7 +28,6 @@ class YoloV3Module(pl.LightningModule):
             ],
             dtype=torch.float32,
         )
-        self.cpu = torch.device("cpu")
         self.conf_threshold = 0.2
         self.iou_threshold = 0.5
         self.size_limits = (2, 416)
@@ -52,10 +51,10 @@ class YoloV3Module(pl.LightningModule):
         output_size = outputs.shape
         grid_size = output_size[2]
         assert output_size[2] == output_size[3]
-        obj_mask = torch.zeros(output_size[:-1], dtype=torch.bool, device=self.cpu)
-        class_mask = torch.zeros(output_size[:-1], device=self.cpu)
-        iou_scores = torch.zeros(output_size[:-1], device=self.cpu)
-        processed = torch.zeros(output_size, device=self.cpu)
+        obj_mask = torch.zeros(output_size[:-1], dtype=torch.bool, device=self.device)
+        class_mask = torch.zeros(output_size[:-1], device=self.device)
+        iou_scores = torch.zeros(output_size[:-1], device=self.device)
+        processed = torch.zeros(output_size, device=self.device)
 
         image_batch_ids, class_ids = annotations[..., :2].long().t()
         processed_bbox = annotations[..., 2:] * grid_size
@@ -70,7 +69,7 @@ class YoloV3Module(pl.LightningModule):
 
         def _make_box(t: torch.Tensor) -> torch.Tensor:
             return torch.cat(
-                (torch.zeros(t.shape, device=self.cpu), t),
+                (torch.zeros(t.shape, device=self.device), t),
                 dim=-1,
             )
 
@@ -97,10 +96,8 @@ class YoloV3Module(pl.LightningModule):
         processed[..., 4] = obj_mask.float()
         processed[image_batch_ids, best_anchors, p_j, p_i, 5 + class_ids] = 1
 
-        outputs_bbox = outputs[image_batch_ids, best_anchors, p_j, p_i, :4].cpu()
-        outputs_probabilities = outputs[
-            image_batch_ids, best_anchors, p_j, p_i, 5:
-        ].cpu()
+        outputs_bbox = outputs[image_batch_ids, best_anchors, p_j, p_i, :4]
+        outputs_probabilities = outputs[image_batch_ids, best_anchors, p_j, p_i, 5:]
         outputs_class_ids = torch.max(outputs_probabilities, dim=-1).indices
         class_mask[image_batch_ids, best_anchors, p_j, p_i] = (
             outputs_class_ids == class_ids
@@ -151,7 +148,6 @@ class YoloV3Module(pl.LightningModule):
         #     where (x, y): center, (w, h): size, [0..1] wrt width or height
         #     and image_id identifies images within a single image batch
         input, annotations = batch
-        annotations = annotations.cpu()
         loss, processed_annotations = {}, {}
         heads = ("x52", "x26", "x13")
         # outputs: Size([batch_size, anchors * (bbox + obj + num_classes), grid_size, grid_size]) for each head
@@ -169,10 +165,12 @@ class YoloV3Module(pl.LightningModule):
                 mask_noobj,
                 mask_class,
                 iou_scores,
-            ) = self._process_annotations(head_outputs, annotations, self.anchors[i])
+            ) = self._process_annotations(
+                head_outputs, annotations, self.anchors[i].to(self.device)
+            )
             loss[head] = self._compute_loss(
-                head_outputs.to(self.device),
-                processed_annotations[head].to(self.device),
+                head_outputs,
+                processed_annotations[head],
                 mask_obj,
                 mask_noobj,
             )
