@@ -6,13 +6,14 @@ from torchvision import transforms
 from torch import Generator
 from pklot_dataset import PkLotDataset
 
-from processing import square_padding, normalize_bbox
+from processing import square_padding, NormalizeBbox
 import pklot_preprocessor
 
 
 class Datamodule(pl.LightningDataModule):
-    def __init__(self):
+    def __init__(self, num_workers=2):
         super().__init__()
+        self.num_workers = num_workers
         self.batch_size = 16
         self.unscaled_size = (1280, 720)
         self.img_size = (416, 416)
@@ -24,7 +25,7 @@ class Datamodule(pl.LightningDataModule):
                 transforms.Resize(self.img_size[0], antialias=False),
             ]
         )
-        self.ann_transform = transforms.Compose([normalize_bbox(self.unscaled_size)])
+        self.ann_transform = transforms.Compose([NormalizeBbox(self.unscaled_size)])
 
     def prepare_data(self):
         return
@@ -62,32 +63,32 @@ class Datamodule(pl.LightningDataModule):
         )
         return (image_batch, annotation_batch)
 
-    def train_dataloader(self, num_workers=2):
+    def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
             pin_memory=True,
-            num_workers=num_workers,
+            num_workers=self.num_workers,
             collate_fn=self._collate_fn,
         )
 
-    def test_dataloader(self, num_workers=2):
+    def test_dataloader(self):
         return DataLoader(
             self.test_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             pin_memory=True,
-            num_workers=num_workers,
+            num_workers=self.num_workers,
             collate_fn=self._collate_fn,
         )
 
-    def val_dataloader(self, num_workers=2):
+    def val_dataloader(self):
         return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             pin_memory=True,
-            num_workers=num_workers,
+            num_workers=self.num_workers,
             collate_fn=self._collate_fn,
         )
