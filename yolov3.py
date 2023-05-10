@@ -7,7 +7,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from torchvision.ops import box_iou
 
-from processing import process_into_aabbs, process_with_nms, process_prediction
+from processing import process_into_aabbs, batched_nms, process_prediction
 
 
 class YoloV3Module(pl.LightningModule):
@@ -175,11 +175,10 @@ class YoloV3Module(pl.LightningModule):
             self.input_size,
             self.anchors.to(self.device),
             self.num_classes,
+            0.1,
             0.5,
-            0.5,
-            self.device,
         )
-        return list(baabbs)
+        return baabbs
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(

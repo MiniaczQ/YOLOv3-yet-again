@@ -163,3 +163,4 @@ data
 pretrained
 testimgs
 ignore
+results*
