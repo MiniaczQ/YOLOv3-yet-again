@@ -44,7 +44,7 @@ def main():
     torch.set_float32_matmul_precision("medium")
     trainer = Trainer(
         auto_scale_batch_size=False,
-        accelerator="cpu",
+        accelerator="gpu",
         devices=1,
         logger=False,
         max_epochs=1,
