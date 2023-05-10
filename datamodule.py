@@ -1,10 +1,12 @@
 import lightning as pl
+import numpy as np
+import torch
 from torch.utils.data import random_split, DataLoader, ConcatDataset
 from torchvision import transforms
 from torch import Generator
 from pklot_dataset import PkLotDataset
 
-from processing import square_padding
+from processing import square_padding, normalize_bbox
 import pklot_preprocessor
 
 
@@ -12,13 +14,26 @@ class Datamodule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
         self.batch_size = 16
+        self.unscaled_size = (1280, 720)
         self.img_size = (416, 416)
+        self.img_transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                square_padding,
+                transforms.Resize(self.img_size[0]),
+            ]
+        )
+        self.ann_transform = transforms.Compose([normalize_bbox(self.unscaled_size)])
 
     def prepare_data(self):
+        return
         pklot_preprocessor.preprocess("data/pklot")
 
     def setup(self, stage=None, train_val_seed=2136, test_seed=2136):
-        pklot_dataset = PkLotDataset("data/pklot", self.get_transform())
+        pklot_dataset = PkLotDataset(
+            "data/pklot", self.img_transform, self.ann_transform
+        )
         dataset = ConcatDataset([pklot_dataset])
 
         dataset, self.test_dataset = random_split(
@@ -29,6 +44,24 @@ class Datamodule(pl.LightningDataModule):
             dataset, [8 / 9, 1 / 9], Generator().manual_seed(train_val_seed)
         )
 
+    @staticmethod
+    def _collate_fn(batch):
+        image_batch = torch.stack([elem[0] for elem in batch], 0)
+        annotation_batch = torch.cat(
+            [
+                torch.cat(
+                    (
+                        torch.ones(annotations.size(0), 1) * batch_index,
+                        annotations,
+                    ),
+                    1,
+                )
+                for batch_index, annotations in enumerate([elem[1] for elem in batch])
+            ],
+            0,
+        )
+        return (image_batch, annotation_batch)
+
     def train_dataloader(self, num_workers=2):
         return DataLoader(
             self.train_dataset,
@@ -36,7 +69,7 @@ class Datamodule(pl.LightningDataModule):
             shuffle=True,
             pin_memory=True,
             num_workers=num_workers,
-            collate_fn=lambda x: x,
+            collate_fn=self._collate_fn,
         )
 
     def test_dataloader(self, num_workers=2):
@@ -46,7 +79,7 @@ class Datamodule(pl.LightningDataModule):
             shuffle=False,
             pin_memory=True,
             num_workers=num_workers,
-            collate_fn=lambda x: x,
+            collate_fn=self._collate_fn,
         )
 
     def val_dataloader(self, num_workers=2):
@@ -56,15 +89,5 @@ class Datamodule(pl.LightningDataModule):
             shuffle=False,
             pin_memory=True,
             num_workers=num_workers,
-            collate_fn=lambda x: x,
-        )
-
-    def get_transform(self):
-        return transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-                square_padding,
-                transforms.Resize(416),
-            ]
+            collate_fn=self._collate_fn,
         )

@@ -52,8 +52,8 @@ class YoloV3Module(pl.LightningModule):
         ignore_thresh: float = 0.7,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         output_size = outputs.shape
-        grid_size = output_size[1]
-        assert output_size[1] == output_size[2]
+        grid_size = output_size[2]
+        assert output_size[2] == output_size[3]
         obj_mask = torch.zeros(output_size[:-1], dtype=torch.bool, device=self.device)
         class_mask = torch.zeros(output_size[:-1], device=self.device)
         iou_scores = torch.zeros(output_size[:-1], device=self.device)
@@ -64,6 +64,7 @@ class YoloV3Module(pl.LightningModule):
             union = wh1[0] * wh1[1] + wh2[0] * wh2[1] - intersection
             return intersection / (union + float_info.epsilon)
 
+        print(annotations[..., :2].long().shape)
         image_batch_ids, class_ids = annotations[..., :2].long().t()
         processed_bbox = annotations[..., 2:] * grid_size
 
@@ -130,12 +131,14 @@ class YoloV3Module(pl.LightningModule):
             [loss_x, loss_y, loss_w, loss_h, loss_obj, loss_cls], device=self.device
         ).sum()
 
-    def training_step(self, batch: torch.Tensor, batch_idx):
+    def training_step(self, batch: list, batch_idx):
         # input: transformed image
         # annotations: annotation_batch_size * (image_id, class_id, x [0..1], y [0..1], w [0..1], h [0..1])
         #     where (x, y): center, (w, h): size, [0..1] wrt width or height
         #     and image_id identifies images within a single image batch
         input, annotations = batch
+        print("input.shape", input.shape)
+        print("annotations.shape", annotations.shape)
         loss, processed_annotations = {}, {}
         heads = ("x52", "x26", "x13")
         # outputs: Size([batch_size, anchors, grid_size, grid_size, (bbox + obj + num_classes)]) for each head
@@ -161,12 +164,6 @@ class YoloV3Module(pl.LightningModule):
                 mask_noobj,
             )
         return loss, outputs, processed_annotations
-
-    def validation_step(self, batch, batch_idx):
-        pass  # TODO
-
-    def test_step(self, batch, batch_idx):
-        pass  # TODO
 
     def predict_step(self, batch, batch_idx):
         bpreds = self(batch)

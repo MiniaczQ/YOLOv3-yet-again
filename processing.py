@@ -20,6 +20,43 @@ def square_padding(t: Tensor):
     return F.pad(t, (lp, rp, tp, bp))
 
 
+# Scale bboxes in annotations
+def normalize_bbox(image_size: tuple[int, int], padded=True):
+    def _map_linearly(
+        x: torch.Tensor, in_range: tuple[float, float], out_range: tuple[float, float]
+    ):
+        assert in_range[1] > in_range[0]
+        assert out_range[1] > out_range[0]
+        scale = (out_range[1] - out_range[0]) / (in_range[1] - in_range[0])
+        return (x - in_range[0]) * scale + out_range[0]
+
+    def _normalize_bbox(annotation: torch.Tensor) -> torch.Tensor:
+        annotation = annotation.clone().float()
+        ratio = image_size[0] / image_size[1]
+        annotation[..., [1, 3]] = _map_linearly(
+            annotation[..., [1, 3]], (0, image_size[0] - 1), (0, 1)
+        )
+        annotation[..., [2, 4]] = _map_linearly(
+            annotation[..., [2, 4]], (0, image_size[1] - 1), (0, 1)
+        )
+        if padded and ratio < 1:
+            annotation[..., 1] = _map_linearly(
+                annotation[..., 1], (0, 1), ((1 - ratio) / 2, (1 + ratio) / 2)
+            )
+            annotation[..., 3] = _map_linearly(annotation[..., 3], (0, 1), (0, ratio))
+        if padded and ratio > 1:
+            inv_ratio = 1 / ratio
+            annotation[..., 2] = _map_linearly(
+                annotation[..., 2], (0, 1), ((1 - inv_ratio) / 2, (1 + inv_ratio) / 2)
+            )
+            annotation[..., 4] = _map_linearly(
+                annotation[..., 4], (0, 1), (0, inv_ratio)
+            )
+        return annotation
+
+    return _normalize_bbox
+
+
 # Unsqueeze
 def unsqueeze_dim0(t: Tensor):
     return t.unsqueeze(0)
