@@ -5,7 +5,7 @@ from torchvision import ops
 
 
 # Squares off the image with padding
-def square_padding(t: Tensor):
+def square_padding(t: Tensor) -> Tensor:
     _, h, w = t.shape
     m = max(h, w)
 
@@ -58,18 +58,15 @@ def normalize_bbox(image_size: tuple[int, int], padded=True):
 
 
 # Unsqueeze
-def unsqueeze_dim0(t: Tensor):
+def unsqueeze_dim0(t: Tensor) -> Tensor:
     return t.unsqueeze(0)
 
 
 # Based on https://blog.paperspace.com/how-to-implement-a-yolo-v3-object-detector-from-scratch-in-pytorch-part-3/
-# Process a batch of predictions from 1 detector
-def process_prediction(bpreds: Tensor, inp_dim: int, anchors: Tensor, num_classes: int):
-    num_anchors = anchors.size(0)
+# Normalize a batch of predictions from 1 detector
+def normalize_model_output(bpreds: Tensor, num_anchors: int, bbox_attrs: int) -> Tensor:
     batch_size = bpreds.size(0)
     pred_dim = bpreds.size(2)
-    bbox_attrs = 5 + num_classes
-    scale = inp_dim // pred_dim
 
     # B x A*(5+N) x W x H
     bpreds = bpreds.view(batch_size, num_anchors, bbox_attrs, pred_dim, pred_dim)
@@ -77,13 +74,25 @@ def process_prediction(bpreds: Tensor, inp_dim: int, anchors: Tensor, num_classe
     bpreds = bpreds.permute(0, 1, 3, 4, 2)
     # B x A x W x H x (5+N)
 
-    # Scale down anchors
-    anchors /= scale
-
     # Sigmoid offsets
     bpreds[..., [0, 1]] = torch.sigmoid(bpreds[..., [0, 1]])
     # Sigmoid object confidence and class probabilities
     bpreds[..., 4:] = torch.sigmoid(bpreds[..., 4:])
+
+    return bpreds
+
+
+# Based on https://blog.paperspace.com/how-to-implement-a-yolo-v3-object-detector-from-scratch-in-pytorch-part-3/
+# Process a batch of predictions from 1 detector
+def process_prediction(
+    bpreds: Tensor, inp_dim: int, anchors: Tensor, num_classes: int
+) -> Tensor:
+    num_anchors = anchors.size(0)
+    batch_size = bpreds.size(0)
+    pred_dim = bpreds.size(2)
+    bbox_attrs = 5 + num_classes
+
+    bpreds = normalize_model_output(bpreds, num_anchors, bbox_attrs)
 
     # Offsets 1 x 1 x W x H x 2
     grid = torch.arange(pred_dim, dtype=torch.float32, device=bpreds.device)
@@ -91,6 +100,10 @@ def process_prediction(bpreds: Tensor, inp_dim: int, anchors: Tensor, num_classe
 
     # Add offsets
     bpreds[..., [0, 1]] += xy_offsets
+
+    # Scale down anchors
+    scale = inp_dim // pred_dim
+    anchors /= scale
 
     # Scale 1 x A x 1 x 1 x 2
     anchors = anchors.view(1, num_anchors, 1, 1, 2)
@@ -115,7 +128,9 @@ def process_prediction(bpreds: Tensor, inp_dim: int, anchors: Tensor, num_classe
 
 
 # Process a batch of predictions from all 3 detectors
-def process_predictions(bpreds, input_size: int, anchors: Tensor, num_classes: int):
+def process_predictions(
+    bpreds, input_size: int, anchors: Tensor, num_classes: int
+) -> Tensor:
     (bx52, bx26, bx13) = bpreds
     bx52 = process_prediction(bx52, input_size, anchors[[0, 1, 2]], num_classes)
     bx26 = process_prediction(bx26, input_size, anchors[[3, 4, 5]], num_classes)
@@ -124,13 +139,13 @@ def process_predictions(bpreds, input_size: int, anchors: Tensor, num_classes: i
 
 
 # Filter away predictions with low objectness score
-def threshold_objectness(preds: Tensor, oc_threshold: float):
+def threshold_objectness(preds: Tensor, oc_threshold: float) -> Tensor:
     mask = preds[:, 4] > oc_threshold
     return preds[mask, :]
 
 
 # Keep only the most probably class
-def keep_best_class(preds: Tensor):
+def keep_best_class(preds: Tensor) -> Tensor:
     class_id, class_prob = torch.max(preds[:, 5:], dim=1)
     preds = preds[..., :5]
     class_id = class_id.float().view(-1, 1)
@@ -140,7 +155,7 @@ def keep_best_class(preds: Tensor):
 
 
 # Turn predictions into AABB with class index
-def batched_nms(preds: Tensor, iou_threshold: float):
+def batched_nms(preds: Tensor, iou_threshold: float) -> Tensor:
     boxes = preds[:, [0, 1, 2, 3]]
     scores = preds[:, 5]
     idxs = preds[:, 6]
@@ -157,7 +172,7 @@ def process_into_aabbs(
     num_classes: int,
     oc_threshold: float,
     iou_threshold: float,
-):
+) -> list:
     results = []
     bpreds = process_predictions(bpreds, input_size, anchors, num_classes)
     for preds in bpreds:
