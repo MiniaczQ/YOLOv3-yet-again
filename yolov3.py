@@ -5,6 +5,7 @@ from sys import float_info
 import torch
 from torch import Tensor
 import torch.nn.functional as F
+from torchmetrics.functional import average_precision
 from torchvision.ops import box_iou, nms
 from processing import process_anchor, xywh_to_rect, normalize_model_output
 
@@ -31,6 +32,7 @@ class YoloV3Module(pl.LightningModule):
             ],
             dtype=torch.float32,
         )
+        self.head_names = ("x52", "x26", "x13")
         self.conf_threshold = 0.2
         self.iou_threshold = 0.5
         self.input_size = input_size
@@ -150,7 +152,7 @@ class YoloV3Module(pl.LightningModule):
         loss_cls = F.binary_cross_entropy(predicted[..., 5:], expected[..., 5:])
         return loss_x + loss_y + loss_w + loss_h + loss_obj + loss_cls
 
-    def training_step(self, batch: list, batch_idx):
+    def _common_step(self, batch: list, batch_idx: int):
         if batch_idx == 0:
             self.epoch_train_loss_sum = 0
         # input: transformed image
@@ -159,18 +161,17 @@ class YoloV3Module(pl.LightningModule):
         #     and image_id identifies images within a single image batch
         input, annotations = batch
         loss, processed_annotations = {}, {}
-        heads = ("x52", "x26", "x13")
         # outputs: Size([batch_size, anchors * (bbox + obj + num_classes), grid_size, grid_size]) for each head
         #     where anchors: 3, bbox: 4, obj: 1, num_classes: 2
-        outputs = dict(zip(heads, self(input)))
-        for i, (head, head_outputs) in enumerate(outputs.items()):
+        outputs = dict(zip(self.head_names, self(input)))
+        for i, (head_name, head_outputs) in enumerate(outputs.items()):
             num_anchors = self.anchors.size(0)
             bbox_attrs = 5 + self.num_classes
             # resizing to: Size([batch_size, anchors, grid_size, grid_size, (bbox + obj + num_classes)])
             #     and using sigmoid to ensure [0..1] for x, y, objectness and per-class probabilities
             head_outputs = normalize_model_output(head_outputs, num_anchors, bbox_attrs)
             (
-                processed_annotations[head],
+                processed_annotations[head_name],
                 mask_obj,
                 mask_noobj,
                 mask_class,
@@ -178,23 +179,37 @@ class YoloV3Module(pl.LightningModule):
             ) = self._process_annotations(
                 head_outputs, annotations, self.anchors[i].to(self.device)
             )
-            loss[head] = self._compute_loss(
+            loss[head_name] = self._compute_loss(
                 head_outputs,
-                processed_annotations[head],
+                processed_annotations[head_name],
                 mask_obj,
                 mask_noobj,
             )
-        total_loss = loss[heads[0]] + loss[heads[1]] + loss[heads[2]]
+        total_loss = (
+            loss[self.head_names[0]]
+            + loss[self.head_names[1]]
+            + loss[self.head_names[2]]
+        )
+        return total_loss, outputs, processed_annotations
+
+    def training_step(self, batch: list, batch_idx: int):
+        loss, _, _ = self._common_step(batch, batch_idx)
         # with open("./total_loss_grad_graph.txt", "w") as f:
         #     f.write(torchviz.make_dot(total_loss).__str__())
-        self.epoch_train_loss_sum += total_loss.item()
-        self.log("batch_idx", batch_idx, prog_bar=True)
-        self.log(
-            "avg_epoch_train_loss",
-            self.epoch_train_loss_sum / (batch_idx + 1),
-            prog_bar=True,
-        )
-        return {"loss": total_loss}
+        return {"loss": loss}
+
+    def training_epoch_end(self, outs):
+        avg_loss = torch.stack([out["loss"] for out in outs]).mean()
+        self.log("train_loss_mean", avg_loss)
+
+    def validation_step(self, batch: list, batch_idx: int):
+        with torch.no_grad():
+            loss, _, _ = self._common_step(batch, batch_idx)
+        return {"val_loss": loss}
+
+    def validation_epoch_end(self, outs):
+        avg_loss = torch.stack([out["val_loss"] for out in outs]).mean()
+        self.log("val_loss_mean", avg_loss)
 
     def predict_step(self, batch, batch_idx):
         (bx52, bx26, bx13) = self(batch)

@@ -51,9 +51,9 @@ def main():
         max_epochs=500,
         callbacks=[
             ModelCheckpoint(
-                monitor="avg_epoch_train_loss",
-                dirpath="model/",
-                filename="model-{epoch:02d}-{avg_epoch_train_loss:.2f}",
+                monitor="val_loss_mean",
+                dirpath=datetime.now().strftime("model/%Y-%m-%d_%H-%M-%S/"),
+                filename="model-{epoch:02d}-{val_loss_mean:.2f}",
                 save_top_k=3,
                 mode="min",
             )
