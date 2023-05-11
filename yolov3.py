@@ -37,9 +37,11 @@ class YoloV3Module(pl.LightningModule):
 
         self.model = YOLOv3(num_classes)
         if num_classes == 80:
-            load_model_from_file(self.model, "pretrained/yolov3.weights")
+            load_model_from_file(self.model, "pretrained_weights/yolov3.weights")
         else:
-            load_model_from_file(self.model.backbone, "pretrained/darknet53.conv.74")
+            load_model_from_file(
+                self.model.backbone, "pretrained_weights/darknet53.conv.74"
+            )
         for p in self.model.backbone.parameters():
             p.requires_grad = False
 

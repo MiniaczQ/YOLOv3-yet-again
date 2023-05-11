@@ -14,7 +14,7 @@ class SimpleDataset(Dataset):
         self.transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                #transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                 ResizeKeepRatio(416),
                 PadToSquare(0.447),
             ]
@@ -23,10 +23,7 @@ class SimpleDataset(Dataset):
     def __getitem__(self, i):
         img_path = self.images[i]
         raw_img = Image.open(img_path).convert("RGB")
-        import torch
-
         img = self.transform(raw_img)
-        torch.save(img, "current.pt")
         return str(img_path.name), img, raw_img
 
     def __len__(self):
