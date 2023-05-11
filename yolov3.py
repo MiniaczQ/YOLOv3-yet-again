@@ -17,7 +17,7 @@ class YoloV3Module(pl.LightningModule):
         num_classes=2,
         input_size=416,
         anchors: Tensor | None = None,
-        learning_rate=1e-3,
+        learning_rate=0.001,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -271,6 +271,6 @@ class YoloV3Module(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(
-            self.parameters(), lr=self.learning_rate, weight_decay=10e-4
+            self.parameters(), lr=self.learning_rate, weight_decay=0.0005, momentum=0.9
         )
         return optimizer
