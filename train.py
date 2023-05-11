@@ -49,15 +49,18 @@ def main():
         devices=1,
         logger=True,
         max_epochs=500,
-        callbacks=[
-            ModelCheckpoint(
-                monitor="avg_epoch_train_loss",
-                dirpath="model/",
-                filename="model-{epoch:02d}-{avg_epoch_train_loss:.2f}",
-                save_top_k=3,
-                mode="min",
-            )
-        ],
+        # callbacks=[
+        #     ModelCheckpoint(
+        #         monitor="avg_epoch_train_loss",
+        #         dirpath="model/",
+        #         filename="model-{epoch:02d}-{avg_epoch_train_loss:.2f}",
+        #         save_top_k=3,
+        #         mode="min",
+        #     )
+        # ],
+        overfit_batches=1,
+        benchmark=False,
+        amp_backend="apex",
     )
     full_model = YoloV3Module(80)
     model = YoloV3Module(2)
@@ -68,7 +71,7 @@ def main():
     # bsaabbs = trainer.predict(model, dl)
     # show_results(ds, batch_size, bsaabbs)
     # summary(model.model, (1, 3, 416, 416))
-    dm = Datamodule(8)
+    dm = Datamodule(0)
     dm.batch_size = 8
     dm.prepare_data()
     dm.setup()

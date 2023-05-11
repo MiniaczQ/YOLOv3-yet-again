@@ -57,6 +57,7 @@ class YoloV3Module(pl.LightningModule):
         ignore_thresh: float = 0.7,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         output_size = outputs.shape
+        batch_size = output_size[0]
         grid_size = output_size[2]
         anchor_scale = self.input_size / grid_size
         anchors = anchors / anchor_scale
@@ -66,16 +67,13 @@ class YoloV3Module(pl.LightningModule):
         iou_scores = torch.zeros(output_size[:-1], device=self.device)
         processed = torch.zeros(output_size, device=self.device)
 
-        image_batch_ids, class_ids = annotations[..., :2].long().t()
+        image_batch_ids = annotations[..., 0].long().clamp(0, batch_size - 1).t()
+        class_ids = annotations[..., 1].long().clamp(0, self.num_classes - 1).t()
         processed_bbox = annotations[..., 2:] * grid_size
 
-        p_xy, p_wh = processed_bbox[..., :2], processed_bbox[..., 2:]
-        p_i, p_j = p_xy.long().t()
-        # preventing some weird indices on CUDA (e.g. 174725728)
-        p_i[p_i < 0] = 0
-        p_j[p_j < 0] = 0
-        p_i[p_i > grid_size - 1] = grid_size - 1
-        p_j[p_j > grid_size - 1] = grid_size - 1
+        xy, wh = processed_bbox[..., :2], processed_bbox[..., 2:]
+        # clamp prevents some weird indices on CUDA (e.g. 174725728)
+        col, row = xy.long().clamp(0, grid_size - 1).t()
 
         def _xywh_from_wh(t: torch.Tensor) -> torch.Tensor:
             return torch.cat(
@@ -95,34 +93,33 @@ class YoloV3Module(pl.LightningModule):
                     _x1y1x2y2_from_xywh(
                         _xywh_from_wh(anchor.repeat(len(annotations), 1))
                     ),
-                    _x1y1x2y2_from_xywh(_xywh_from_wh(p_wh)),
+                    _x1y1x2y2_from_xywh(_xywh_from_wh(wh)),
                 ).diag()
                 for anchor in anchors
             ],
             -1,
         )
         best_anchors = wh_iou_per_anchor.max(-1).indices
-        obj_mask[image_batch_ids, best_anchors, p_j, p_i] = 1
+        obj_mask[image_batch_ids, best_anchors, row, col] = 1
         noobj_mask = ~obj_mask
         for ious in wh_iou_per_anchor:
-            noobj_mask[image_batch_ids, :, p_j, p_i][:, ious > ignore_thresh, ...] = 0
+            noobj_mask[image_batch_ids, :, row, col][:, ious > ignore_thresh, ...] = 0
 
-        # TODO: why p_j before p_i? inverting coordinates?
-        processed[image_batch_ids, best_anchors, p_j, p_i, :2] = p_xy - p_xy.floor()
-        processed[image_batch_ids, best_anchors, p_j, p_i, 2:4] = torch.log(
-            p_wh / anchors[best_anchors] + float_info.epsilon
+        processed[image_batch_ids, best_anchors, row, col, :2] = xy - xy.floor()
+        processed[image_batch_ids, best_anchors, row, col, 2:4] = torch.log(
+            wh / anchors[best_anchors] + float_info.epsilon
         )
         processed[..., 4] = obj_mask.float()
-        processed[image_batch_ids, best_anchors, p_j, p_i, 5 + class_ids] = 1
+        processed[image_batch_ids, best_anchors, row, col, 5 + class_ids] = 1
 
-        outputs_bbox = outputs[image_batch_ids, best_anchors, p_j, p_i, :4]
-        outputs_probabilities = outputs[image_batch_ids, best_anchors, p_j, p_i, 5:]
+        outputs_bbox = outputs[image_batch_ids, best_anchors, row, col, :4]
+        outputs_probabilities = outputs[image_batch_ids, best_anchors, row, col, 5:]
         outputs_class_ids = torch.max(outputs_probabilities, dim=-1).indices
-        class_mask[image_batch_ids, best_anchors, p_j, p_i] = (
+        class_mask[image_batch_ids, best_anchors, row, col] = (
             outputs_class_ids == class_ids
         ).float()
 
-        iou_scores[image_batch_ids, best_anchors, p_j, p_i] = box_iou(
+        iou_scores[image_batch_ids, best_anchors, row, col] = box_iou(
             _x1y1x2y2_from_xywh(outputs_bbox),
             _x1y1x2y2_from_xywh(processed_bbox),
         ).diag()
