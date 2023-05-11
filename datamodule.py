@@ -22,7 +22,7 @@ class Datamodule(pl.LightningDataModule):
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                 ResizeKeepRatio(416),
-                PadToSquare(),
+                PadToSquare(114),
             ]
         )
         self.ann_transform = transforms.Compose([NormalizeBbox(self.unscaled_size)])

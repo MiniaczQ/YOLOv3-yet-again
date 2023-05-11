@@ -14,7 +14,7 @@ class Darknet53Conv(nn.Module):
             (kernel_size - 1) // 2,
             bias=False,
         )
-        self.bn = nn.BatchNorm2d(out_channels, momentum=0.9, eps=1e-5)
+        self.bn = nn.BatchNorm2d(out_channels, momentum=0.03, eps=1e-4)
         self.af = nn.LeakyReLU(0.1)
 
     def forward(self, x):

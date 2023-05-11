@@ -5,11 +5,8 @@ from sys import float_info
 import torch
 from torch import Tensor
 import torch.nn.functional as F
-from torchmetrics.functional import average_precision
-from torchvision.ops import box_iou, nms
-from processing import process_anchor, xywh_to_rect, normalize_model_output
-
-# import torchviz
+from torchvision.ops import box_iou
+from processing import non_max_supression, process_anchor, normalize_model_output
 
 
 class YoloV3Module(pl.LightningModule):
@@ -33,7 +30,7 @@ class YoloV3Module(pl.LightningModule):
             dtype=torch.float32,
         )
         self.head_names = ("x52", "x26", "x13")
-        self.conf_threshold = 0.2
+        self.conf_threshold = 0.5
         self.iou_threshold = 0.5
         self.input_size = input_size
         self.size_limits = (2, input_size)
@@ -212,7 +209,8 @@ class YoloV3Module(pl.LightningModule):
         self.log("val_loss_mean", avg_loss)
 
     def predict_step(self, batch, batch_idx):
-        (bx52, bx26, bx13) = self(batch)
+        paths, images, raw_images = batch
+        (bx52, bx26, bx13) = self(images)
         if self.anchors.device != self.device:
             self.anchors = self.anchors.to(self.device)
         anchors = self.anchors
@@ -223,57 +221,10 @@ class YoloV3Module(pl.LightningModule):
         bx26 = process_anchor(bx26, input_size, anchors[1], num_classes)
         bx13 = process_anchor(bx13, input_size, anchors[2], num_classes)
         bpreds = torch.cat([bx52, bx26, bx13], dim=1)
-        results = []
-        # Run postprocessing and non max suppression on every image's predictions
-        for preds in bpreds:
-            # Filter away low objectivness predictions
-            preds = preds[preds[:, 4] > self.conf_threshold]
-            # Filter away invalid prediction sizes
-            min_mask = preds[:, [2, 3]] > self.size_limits[0]
-            max_mask = preds[:, [2, 3]] < self.size_limits[1]
-            preds = preds[(min_mask & max_mask).all(1)]
-            # Early return
-            if preds.size(0) == 0:
-                results.append(preds)
-                continue
-            # Convert to rectangles
-            boxes = xywh_to_rect(preds[:, [0, 1, 2, 3]])
-            # Best prediction for each box
-            confs, ids = preds[:, 5:].max(1)
-            # Include objectness in class probability
-            confs *= preds[:, 4]
-            # Reduce predictions to x, y, w, h, class probability, class id
-            preds = torch.cat([boxes, confs.view(-1, 1), ids.view(-1, 1)], 1)
-            # Filter away low probability classes
-            preds = preds[confs > self.conf_threshold]
-            # Early return
-            num_boxes = preds.size(0)
-            if num_boxes == 0:
-                results.append(preds)
-                continue
-            # Batched nms
-            classes = preds[:, 5]  # classes
-            boxes = (
-                preds[:, :4].clone() + classes.view(-1, 1) * self.size_limits[1]
-            )  # boxes (offset by class)
-            scores = preds[:, 4]
-            idxs = nms(boxes, scores, self.iou_threshold)
-            if 1 < num_boxes:  # Merge NMS (boxes merged using weighted mean)
-                try:  # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
-                    iou = (
-                        boxes.box_iou(boxes[idxs], boxes) > self.iou_threshold
-                    )  # iou matrix
-                    weights = iou * scores[None]  # box weights
-                    preds[idxs, :4] = torch.mm(
-                        weights, preds[:, :4]
-                    ).float() / weights.sum(
-                        1, keepdim=True
-                    )  # merged boxes
-                except:
-                    pass
-            results.append(preds[idxs])
-
-        return results
+        results = non_max_supression(
+            bpreds, self.conf_threshold, self.size_limits, self.iou_threshold
+        )
+        return paths, results, raw_images
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(

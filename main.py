@@ -13,12 +13,21 @@ def main():
         auto_scale_batch_size=False, accelerator="gpu", devices=1, logger=False
     )
     model = YoloV3Module(80)
-    ds = SimpleDataset("testimgs")
+    ds = SimpleDataset("test_images")
     batch_size = 32
-    dl = DataLoader(ds, batch_size, False)
-    bspreds = trainer.predict(model, dl)
+    dl = DataLoader(
+        ds,
+        batch_size,
+        False,
+        collate_fn=lambda x: (
+            list([i[0] for i in x]),
+            torch.stack([i[1] for i in x]),
+            list([i[2] for i in x]),
+        ),
+    )
+    results = trainer.predict(model, dl)
     with torch.no_grad():
-        show_results(ds, batch_size, bspreds, 416)
+        show_results(results, 416)
 
 
 if __name__ == "__main__":

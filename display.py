@@ -57,23 +57,21 @@ def draw_prediction(draw: ImageDraw.ImageDraw, pred):
     draw.text((pred[0], pred[1]), text, C_WHITE)
 
 
-def show_results(ds, batch_size, bspreds, out_size):
-    results_dir = Path(datetime.now().strftime("results/%Y_%m_%d_%H_%M_%S"))
+# confirmed with another model as long as model input was 416x416 (no letterboxing)
+def show_results(results, out_size):
+    results_dir = Path(datetime.now().strftime("detection_results/%Y_%m_%d_%H_%M_%S"))
     makedirs(results_dir)
-    for i, bpreds in enumerate(bspreds):
-        for j, preds in enumerate(bpreds):
-            path, img = ds.get_raw(batch_size * i + j)
-            ow, oh = img.width, img.height
+    for batch in results:
+        for path, predictions, raw_image in zip(*batch):
+            ow, oh = raw_image.width, raw_image.height
             om = max(ow, oh)
             ratio = om / out_size
             nw, nh = int(round(ow / ratio)), int(round(oh / ratio))
-            draw = ImageDraw.Draw(img)
-            for pred in preds:
-                pred = pred.clone()
-                pred[[0, 1, 2, 3]] = clamp_rect(pred[[0, 1, 2, 3]], (0, 0, 415, 415))
+            draw = ImageDraw.Draw(raw_image)
+            for pred in predictions:
+                pred = clamp_rect(pred.clone(), (0, 0, 415, 415))
                 pred = unpad(pred, ((out_size - nw) // 2, (out_size - nh) // 2))
                 pred = scale(pred, (ratio, ratio))
-                pred = pred[[1, 0, 3, 2, 4, 5]]
                 pred = finalize_predictions(pred)
                 draw_prediction(draw, pred)
-            img.save(results_dir.joinpath(path.name))
+            raw_image.save(results_dir.joinpath(path))

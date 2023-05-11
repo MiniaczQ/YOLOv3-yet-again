@@ -2,11 +2,14 @@ from torch import Tensor
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import torch
-from torchvision import ops
+from torchvision.ops import nms
 
 
 # Squares off the image with padding
 class PadToSquare:
+    def __init__(self, value):
+        self.value = value
+
     def __call__(self, t: Tensor) -> Tensor:
         _, h, w = t.shape
         m = max(h, w)
@@ -19,7 +22,7 @@ class PadToSquare:
         tp = dh // 2
         bp = dh - tp
 
-        return F.pad(t, (lp, rp, tp, bp))
+        return F.pad(t, (lp, rp, tp, bp), value=self.value)
 
 
 # Downsizes the image to fit inside max_size, while keeping the aspect ratio
@@ -109,6 +112,7 @@ def normalize_model_output(bpreds: Tensor, num_anchors: int, bbox_attrs: int) ->
 # Based on
 # https://blog.paperspace.com/how-to-implement-a-yolo-v3-object-detector-from-scratch-in-pytorch-part-3/
 # https://github.com/Lornatang/YOLOv3-PyTorch/tree/main
+# Not so shrimple
 # Process a batch of predictions from 1 detector
 def process_anchor(
     bpreds: Tensor, inp_dim: int, anchors: Tensor, num_classes: int
@@ -117,31 +121,20 @@ def process_anchor(
     batch_size = bpreds.size(0)
     pred_dim = bpreds.size(2)
     bbox_attrs = 5 + num_classes
-
-    # Sigmoid & transform to B x A x H x W x (5+N) representation
-    bpreds = normalize_model_output(bpreds, num_anchors, bbox_attrs)
-
-    # Position
+    stride = inp_dim // pred_dim
+    # B x A*(5+N) x H x W
+    bpreds = bpreds.view(batch_size, num_anchors, bbox_attrs, pred_dim, pred_dim)
+    # B x A x (5+N) x H x W
+    bpreds = bpreds.permute(0, 1, 3, 4, 2)
+    # B x A x H x W x (5+N)
     grid_axis = torch.arange(pred_dim, dtype=torch.float32, device=bpreds.device)
-    grid = torch.cartesian_prod(grid_axis, grid_axis).view(1, 1, pred_dim, pred_dim, 2)
-    bpreds[..., [0, 1]] += grid
-
-    # Size
-    scale = inp_dim // pred_dim
-    anchors /= scale
-    anchors = anchors.view(1, num_anchors, 1, 1, 2)
-    bpreds[..., [2, 3]] = torch.exp(bpreds[..., [2, 3]]) * anchors
-
-    # Upscale
-    bpreds[..., [0, 1, 2, 3]] *= scale
-
-    # If we want a perfect result match with the tutorial, we need to use the exact same order before reducing dimensions
-    # In practice, all anchor, width and height relevant information are already inside the attributes, so we don't need to keep them in any specific order
-    # preds = preds.permute(0, 3, 2, 1, 4)
-
-    # Reduce dimensions
-    bpreds = bpreds.reshape(batch_size, -1, bbox_attrs)
-    return bpreds
+    grid = torch.cartesian_prod(grid_axis, grid_axis).view(1, 1, pred_dim, pred_dim, 2)[
+        ..., [1, 0]
+    ]
+    xy = (torch.sigmoid(bpreds[..., [0, 1]]) + grid) * stride
+    wh = torch.exp(bpreds[..., [2, 3]]) * anchors.view(1, num_anchors, 1, 1, 2)
+    attr = torch.sigmoid(bpreds[..., 4:])
+    return torch.cat([xy, wh, attr], 4).view(batch_size, -1, bbox_attrs)
 
 
 # Filter away predictions with low objectness score
@@ -160,16 +153,6 @@ def keep_best_class(preds: Tensor) -> Tensor:
     return preds
 
 
-# Turn predictions into AABB with class index
-def batched_nms(preds: Tensor, iou_threshold: float) -> Tensor:
-    boxes = preds[:, [0, 1, 2, 3]]
-    scores = preds[:, 5]
-    idxs = preds[:, 6]
-    kept_idxs = ops.batched_nms(boxes, scores, idxs, iou_threshold)
-    preds = preds[kept_idxs]
-    return preds
-
-
 # Convert center_x, center_y, width, height to rectangles
 def xywh_to_rect(xywhs: Tensor):
     rects = xywhs.clone()
@@ -177,3 +160,54 @@ def xywh_to_rect(xywhs: Tensor):
     rects[..., [0, 1]] = xywhs[..., [0, 1]] - rects[..., [2, 3]]
     rects[..., [2, 3]] = xywhs[..., [0, 1]] + rects[..., [2, 3]]
     return rects
+
+
+# Confirmed working with another model
+# Non max suppresion
+def non_max_supression(bpreds: Tensor, conf_threshold, size_limits, iou_threshold):
+    # Run postprocessing and non max suppression on every image's predictions
+    results = []
+    for preds in bpreds:
+        # Filter away low objectivness predictions
+        preds = preds[preds[:, 4] > conf_threshold]
+        # Filter away invalid prediction sizes
+        min_mask = preds[:, [2, 3]] > size_limits[0]
+        max_mask = preds[:, [2, 3]] < size_limits[1]
+        preds = preds[(min_mask & max_mask).all(1)]
+        # Early return
+        if preds.size(0) == 0:
+            results.append(preds)
+            continue
+        # Convert to rectangles
+        boxes = xywh_to_rect(preds[:, [0, 1, 2, 3]])
+        # Best prediction for each box
+        confs, ids = preds[:, 5:].max(1)
+        # Include objectness in class probability
+        confs *= preds[:, 4]
+        # Reduce predictions to x, y, w, h, class probability, class id
+        preds = torch.cat([boxes, confs.view(-1, 1), ids.view(-1, 1)], 1)
+        # Filter away low probability classes
+        preds = preds[confs > conf_threshold]
+        # Early return
+        num_boxes = preds.size(0)
+        if num_boxes == 0:
+            results.append(preds)
+            continue
+        # Batched nms
+        classes = preds[:, 5]  # classes
+        boxes = (
+            preds[:, :4].clone() + classes.view(-1, 1) * size_limits[1]
+        )  # boxes (offset by class)
+        scores = preds[:, 4]
+        idxs = nms(boxes, scores, iou_threshold)
+        if 1 < num_boxes:  # Merge NMS (boxes merged using weighted mean)
+            try:  # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
+                iou = boxes.box_iou(boxes[idxs], boxes) > iou_threshold  # iou matrix
+                weights = iou * scores[None]  # box weights
+                preds[idxs, :4] = torch.mm(weights, preds[:, :4]).float() / weights.sum(
+                    1, keepdim=True
+                )  # merged boxes
+            except:
+                pass
+        results.append(preds[idxs])
+    return results

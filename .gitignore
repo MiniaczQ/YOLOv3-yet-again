@@ -160,6 +160,7 @@ cython_debug/
 #.idea/
 
 data
-pretrained
-testimgs
-results*
+pretrained_weights
+test_images
+detection_results
+model_checkpoints

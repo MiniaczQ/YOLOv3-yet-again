@@ -14,22 +14,20 @@ class SimpleDataset(Dataset):
         self.transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                #transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                 ResizeKeepRatio(416),
-                PadToSquare(),
+                PadToSquare(0.447),
             ]
         )
 
     def __getitem__(self, i):
         img_path = self.images[i]
-        img = Image.open(img_path).convert("RGB")
-        img = self.transform(img)
-        return img
+        raw_img = Image.open(img_path).convert("RGB")
+        import torch
 
-    def get_raw(self, i):
-        img_path = self.images[i]
-        img = Image.open(img_path).convert("RGB")
-        return img_path, img
+        img = self.transform(raw_img)
+        torch.save(img, "current.pt")
+        return str(img_path.name), img, raw_img
 
     def __len__(self):
         return len(self.images)
