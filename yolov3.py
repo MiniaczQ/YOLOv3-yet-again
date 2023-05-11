@@ -41,6 +41,8 @@ class YoloV3Module(pl.LightningModule):
             load_model_from_file(self.model, "pretrained/yolov3.weights")
         else:
             load_model_from_file(self.model.backbone, "pretrained/darknet53.conv.74")
+        for p in self.model.backbone.parameters():
+            p.requires_grad = False
 
         self.epoch_train_loss_sum = 0
 
@@ -139,22 +141,14 @@ class YoloV3Module(pl.LightningModule):
             for i in range(4)
         )
         # TODO: magic numbers - honestly I don't know what they mean yet
-        scale_loss_obj = [1, 100]  # magic numbers for obj and noobj
-        loss_obj = torch.tensor(
-            [
-                scale
-                * F.binary_cross_entropy(
-                    predicted[..., 4][mask], expected[..., 4][mask]
-                )
-                for mask, scale in zip((mask_obj, mask_noobj), scale_loss_obj)
-            ],
-            device=self.device,
-        ).sum()
+        obj_coeff, noobj_coeff = 1, 100
+        loss_obj = obj_coeff * F.binary_cross_entropy(
+            predicted[..., 4][mask_obj], expected[..., 4][mask_obj]
+        ) + noobj_coeff * F.binary_cross_entropy(
+            predicted[..., 4][mask_noobj], expected[..., 4][mask_noobj]
+        )
         loss_cls = F.binary_cross_entropy(predicted[..., 5:], expected[..., 5:])
-        return torch.tensor(
-            [loss_x, loss_y, loss_w, loss_h, loss_obj, loss_cls],
-            device=self.device,
-        ).sum()
+        return loss_x + loss_y + loss_w + loss_h + loss_obj + loss_cls
 
     def training_step(self, batch: list, batch_idx):
         if batch_idx == 0:
@@ -190,9 +184,9 @@ class YoloV3Module(pl.LightningModule):
                 mask_obj,
                 mask_noobj,
             )
-        total_loss = torch.tensor(
-            tuple(loss.values()), device=self.device, requires_grad=True
-        ).sum()
+        total_loss = loss[heads[0]] + loss[heads[1]] + loss[heads[2]]
+        # with open("./total_loss_grad_graph.txt", "w") as f:
+        #     f.write(torchviz.make_dot(total_loss).__str__())
         self.epoch_train_loss_sum += total_loss.item()
         self.log("batch_idx", batch_idx, prog_bar=True)
         self.log(
