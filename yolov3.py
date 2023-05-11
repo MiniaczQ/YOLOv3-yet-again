@@ -11,10 +11,12 @@ from processing import process_anchor, xywh_to_rect, normalize_model_output
 
 
 class YoloV3Module(pl.LightningModule):
-    input_size = 416
-
     def __init__(
-        self, num_classes=2, anchors: Tensor | None = None, learning_rate=1e-3
+        self,
+        num_classes=2,
+        input_size=416,
+        anchors: Tensor | None = None,
+        learning_rate=1e-3,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -30,11 +32,16 @@ class YoloV3Module(pl.LightningModule):
         )
         self.conf_threshold = 0.2
         self.iou_threshold = 0.5
-        self.size_limits = (2, 416)
+        self.input_size = input_size
+        self.size_limits = (2, input_size)
 
         self.model = YOLOv3(num_classes)
-        load_model_from_file(self.model.backbone, "pretrained/darknet53.conv.74")
-        # load_model_from_file(self.model, "pretrained/yolov3.weights")
+        if num_classes == 80:
+            load_model_from_file(self.model, "pretrained/yolov3.weights")
+        else:
+            load_model_from_file(self.model.backbone, "pretrained/darknet53.conv.74")
+
+        self.epoch_train_loss_sum = 0
 
     def forward(self, x):
         return self.model(x)
@@ -50,6 +57,8 @@ class YoloV3Module(pl.LightningModule):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         output_size = outputs.shape
         grid_size = output_size[2]
+        anchor_scale = self.input_size / grid_size
+        anchors = anchors / anchor_scale
         assert output_size[2] == output_size[3]
         obj_mask = torch.zeros(output_size[:-1], dtype=torch.bool, device=self.device)
         class_mask = torch.zeros(output_size[:-1], device=self.device)
@@ -143,6 +152,8 @@ class YoloV3Module(pl.LightningModule):
         ).sum()
 
     def training_step(self, batch: list, batch_idx):
+        if batch_idx == 0:
+            self.epoch_train_loss_sum = 0
         # input: transformed image
         # annotations: annotation_batch_size * (image_id, class_id, x [0..1], y [0..1], w [0..1], h [0..1])
         #     where (x, y): center, (w, h): size, [0..1] wrt width or height
@@ -177,6 +188,13 @@ class YoloV3Module(pl.LightningModule):
         total_loss = torch.tensor(
             tuple(loss.values()), device=self.device, requires_grad=True
         ).sum()
+        self.epoch_train_loss_sum += total_loss.item()
+        self.log("batch_idx", batch_idx, prog_bar=True)
+        self.log(
+            "avg_epoch_train_loss",
+            self.epoch_train_loss_sum / (batch_idx + 1),
+            prog_bar=True,
+        )
         return {"loss": total_loss}
 
     def predict_step(self, batch, batch_idx):

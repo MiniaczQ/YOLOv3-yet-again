@@ -1,4 +1,5 @@
 from lightning import Trainer
+from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
 from datamodule import Datamodule
 from torch.utils.data import DataLoader, Dataset
@@ -46,10 +47,21 @@ def main():
         auto_scale_batch_size=False,
         accelerator="gpu",
         devices=1,
-        logger=False,
-        max_epochs=1,
+        logger=True,
+        max_epochs=500,
+        callbacks=[
+            ModelCheckpoint(
+                monitor="avg_epoch_train_loss",
+                dirpath="model/",
+                filename="model-{epoch:02d}-{avg_epoch_train_loss:.2f}",
+                save_top_k=3,
+                mode="min",
+            )
+        ],
     )
+    full_model = YoloV3Module(80)
     model = YoloV3Module(2)
+    model.model.backbone = full_model.model.backbone
     # ds = SimpleDataset("testimgs")
     # batch_size = 5
     # dl = DataLoader(ds, batch_size, False)
@@ -57,13 +69,15 @@ def main():
     # show_results(ds, batch_size, bsaabbs)
     # summary(model.model, (1, 3, 416, 416))
     dm = Datamodule(8)
-    dm.batch_size = 2
+    dm.batch_size = 8
     dm.prepare_data()
     dm.setup()
     # dl = dm.train_dataloader(0)
     # data = next(iter(dl))
     # print(data)
     # model.training_step(data, 0)
+    # tuner = trainer.tuner
+    # tuner.scale_batch_size(model=model, datamodule=dm)
     trainer.fit(model=model, datamodule=dm)
 
 
