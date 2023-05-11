@@ -159,7 +159,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-darknet53.conv.74
-darknet53.weights
-*.jpg
-*.png
+data
+pretrained_weights
+test_images
+detection_results
+model_checkpoints

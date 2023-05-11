@@ -1,3 +1,4 @@
+import torch
 from torch import nn, cat
 import torch.nn.functional as F
 
@@ -13,7 +14,7 @@ class Darknet53Conv(nn.Module):
             (kernel_size - 1) // 2,
             bias=False,
         )
-        self.bn = nn.BatchNorm2d(out_channels, momentum=0.9, eps=1e-5)
+        self.bn = nn.BatchNorm2d(out_channels, momentum=0.03, eps=1e-4)
         self.af = nn.LeakyReLU(0.1)
 
     def forward(self, x):
@@ -82,30 +83,15 @@ class Darknet53(nn.Module):
         return x52, x26, x13
 
 
-class Darknet53Classifier(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.darknet = Darknet53()
-        self.classifier = nn.Sequential(
-            nn.AvgPool2d(13),  # 13x13 -> 1x1
-            nn.Conv2d(1024, 1000, 1),
-            nn.Softmax(dim=1),
-        )
-
-    def forward(self, x):
-        (_, _, x) = self.darknet(x)
-        x = self.classifier(x)
-        return x
-
-
 class FeaturePyramidConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
+        mid_chahnnels = out_channels * 2
         self.conv1 = Darknet53Conv(in_channels, out_channels, 1)
-        self.conv2 = Darknet53Conv(out_channels, in_channels)
-        self.conv3 = Darknet53Conv(in_channels, out_channels, 1)
-        self.conv4 = Darknet53Conv(out_channels, in_channels)
-        self.conv5 = Darknet53Conv(in_channels, out_channels, 1)
+        self.conv2 = Darknet53Conv(out_channels, mid_chahnnels)
+        self.conv3 = Darknet53Conv(mid_chahnnels, out_channels, 1)
+        self.conv4 = Darknet53Conv(out_channels, mid_chahnnels)
+        self.conv5 = Darknet53Conv(mid_chahnnels, out_channels, 1)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -116,8 +102,8 @@ class FeaturePyramidConv(nn.Module):
         return x
 
 
-class YOLOv3Detector(nn.Module):
-    def __init__(self, in_channels, num_classes):
+class YOLOv3Head(nn.Module):
+    def __init__(self, in_channels: int, num_classes: int):
         super().__init__()
         mid_channels = in_channels * 2
         self.conv1 = Darknet53Conv(in_channels, mid_channels)
@@ -132,7 +118,7 @@ class YOLOv3Detector(nn.Module):
 class FeaturePyramidUpsample(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
-        self.conv = Darknet53Conv(in_channels, in_channels // 2, 3)
+        self.conv = Darknet53Conv(in_channels, in_channels // 2, 1)
 
     def forward(self, x):
         x = self.conv(x)
@@ -166,17 +152,17 @@ class FeaturePyramid(nn.Module):
 
 
 class YOLOv3(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes: int):
         super().__init__()
         self.backbone = Darknet53()
         self.neck = FeaturePyramid()
-        self.head1 = YOLOv3Detector(512, num_classes)
-        self.head2 = YOLOv3Detector(256, num_classes)
-        self.head3 = YOLOv3Detector(128, num_classes)
+        self.head1 = YOLOv3Head(512, num_classes)
+        self.head2 = YOLOv3Head(256, num_classes)
+        self.head3 = YOLOv3Head(128, num_classes)
 
     def forward(self, x):
-        x = self.backbone(x)
-        (x52, x26, x13) = self.neck(x)
+        (x52, x26, x13) = self.backbone(x)
+        (x52, x26, x13) = self.neck((x52, x26, x13))
         x13 = self.head1(x13)
         x26 = self.head2(x26)
         x52 = self.head3(x52)
