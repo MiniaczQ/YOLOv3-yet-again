@@ -6,8 +6,9 @@ import torch
 from torch import Tensor
 import torch.nn.functional as F
 from torchvision.ops import box_iou, nms
-
 from processing import process_anchor, xywh_to_rect, normalize_model_output
+
+# import torchviz
 
 
 class YoloV3Module(pl.LightningModule):
@@ -76,16 +77,25 @@ class YoloV3Module(pl.LightningModule):
         p_i[p_i > grid_size - 1] = grid_size - 1
         p_j[p_j > grid_size - 1] = grid_size - 1
 
-        def _make_box(t: torch.Tensor) -> torch.Tensor:
+        def _xywh_from_wh(t: torch.Tensor) -> torch.Tensor:
             return torch.cat(
-                (torch.zeros(t.shape, device=self.device), t),
+                (torch.zeros(t.shape, device=self.device, requires_grad=True), t),
                 dim=-1,
+            )
+
+        def _x1y1x2y2_from_xywh(xywh: torch.Tensor) -> torch.Tensor:
+            return torch.cat(
+                (xywh[..., :2] - xywh[..., 2:] / 2, xywh[..., :2] + xywh[..., 2:] / 2),
+                -1,
             )
 
         wh_iou_per_anchor = torch.stack(
             [
                 box_iou(
-                    _make_box(anchor.repeat(len(annotations), 1)), _make_box(p_wh)
+                    _x1y1x2y2_from_xywh(
+                        _xywh_from_wh(anchor.repeat(len(annotations), 1))
+                    ),
+                    _x1y1x2y2_from_xywh(_xywh_from_wh(p_wh)),
                 ).diag()
                 for anchor in anchors
             ],
@@ -112,11 +122,9 @@ class YoloV3Module(pl.LightningModule):
             outputs_class_ids == class_ids
         ).float()
 
-        outputs_bbox[..., 2:] += outputs_bbox[..., :2]
-        processed_bbox[..., 2:] += processed_bbox[..., :2]
         iou_scores[image_batch_ids, best_anchors, p_j, p_i] = box_iou(
-            outputs_bbox,
-            processed_bbox,
+            _x1y1x2y2_from_xywh(outputs_bbox),
+            _x1y1x2y2_from_xywh(processed_bbox),
         ).diag()
 
         return (processed, obj_mask, noobj_mask, class_mask, iou_scores)
