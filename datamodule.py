@@ -61,8 +61,8 @@ class Datamodule(pl.LightningDataModule):
             ],
             0,
         )
-        path_batch = torch.stack([elem[2] for elem in batch], 0)
-        raw_image_batch = torch.stack([elem[3] for elem in batch], 0)
+        path_batch = [elem[2] for elem in batch]
+        raw_image_batch = [elem[3] for elem in batch]
         return (image_batch, annotation_batch, path_batch, raw_image_batch)
 
     def train_dataloader(self):

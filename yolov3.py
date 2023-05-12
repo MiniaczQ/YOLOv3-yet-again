@@ -42,8 +42,8 @@ class YoloV3Module(pl.LightningModule):
             load_model_from_file(
                 self.model.backbone, "pretrained_weights/darknet53.conv.74"
             )
-        # for p in self.model.backbone.parameters():
-        #    p.requires_grad = False
+        for p in self.model.backbone.parameters():
+            p.requires_grad = False
 
         self.epoch_train_loss_sum = 0
 
@@ -143,11 +143,15 @@ class YoloV3Module(pl.LightningModule):
         )
         # TODO: magic numbers - honestly I don't know what they mean yet
         obj_coeff, noobj_coeff = 1, 100
-        loss_obj = obj_coeff * F.binary_cross_entropy(
-            predicted[..., 4][mask_obj], expected[..., 4][mask_obj]
-        ) + noobj_coeff * F.binary_cross_entropy(
-            predicted[..., 4][mask_noobj], expected[..., 4][mask_noobj]
+        loss_obj_obj = obj_coeff * F.binary_cross_entropy(
+            predicted[..., 4][mask_obj].clamp(0, 1),
+            expected[..., 4][mask_obj].clamp(0, 1),
         )
+        loss_obj_noobj = noobj_coeff * F.binary_cross_entropy(
+            predicted[..., 4][mask_noobj].clamp(0, 1),
+            expected[..., 4][mask_noobj].clamp(0, 1),
+        )
+        loss_obj = loss_obj_obj + loss_obj_noobj
         loss_cls = F.binary_cross_entropy(predicted[..., 5:], expected[..., 5:])
         return loss_x + loss_y + loss_w + loss_h + loss_obj + loss_cls
 
