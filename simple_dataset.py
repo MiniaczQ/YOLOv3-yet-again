@@ -21,10 +21,11 @@ class SimpleDataset(Dataset):
         )
 
     def __getitem__(self, i):
-        img_path = self.images[i]
         raw_img = Image.open(img_path).convert("RGB")
         img = self.transform(raw_img)
-        return str(img_path.name), img, raw_img
+        annotations = None
+        img_path = self.images[i]
+        return img, annotations, str(img_path.name), raw_img
 
     def __len__(self):
         return len(self.images)

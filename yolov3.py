@@ -158,7 +158,7 @@ class YoloV3Module(pl.LightningModule):
         # annotations: annotation_batch_size * (image_id, class_id, x [0..1], y [0..1], w [0..1], h [0..1])
         #     where (x, y): center, (w, h): size, [0..1] wrt width or height
         #     and image_id identifies images within a single image batch
-        input, annotations = batch
+        input, annotations, paths, raw_input = batch
         loss, processed_annotations = {}, {}
         # outputs: Size([batch_size, anchors * (bbox + obj + num_classes), grid_size, grid_size]) for each head
         #     where anchors: 3, bbox: 4, obj: 1, num_classes: 2
@@ -211,7 +211,7 @@ class YoloV3Module(pl.LightningModule):
         self.log("val_loss_mean", avg_loss)
 
     def predict_step(self, batch, batch_idx):
-        paths, images, raw_images = batch
+        images, _, paths, raw_images = batch
         (bx52, bx26, bx13) = self(images)
         if self.anchors.device != self.device:
             self.anchors = self.anchors.to(self.device)
