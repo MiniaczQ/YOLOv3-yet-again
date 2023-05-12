@@ -1,7 +1,7 @@
 import lightning as pl
 import numpy as np
 import torch
-from torch.utils.data import random_split, DataLoader, ConcatDataset
+from torch.utils.data import random_split, DataLoader, ConcatDataset, Dataset
 from torchvision import transforms
 from torch import Generator
 from pklot_dataset import PkLotDataset
@@ -11,9 +11,20 @@ import pklot_preprocessor
 
 
 class Datamodule(pl.LightningDataModule):
-    def __init__(self, num_workers=2):
+    def __init__(
+        self,
+        num_workers=2,
+        size_limit=0,
+        train_val_seed=2136,
+        test_seed=2136,
+        size_limit_seed=2136,
+    ):
         super().__init__()
         self.num_workers = num_workers
+        self.size_limit = size_limit
+        self.train_val_seed = train_val_seed
+        self.test_seed = test_seed
+        self.size_limit_seed = size_limit_seed
         self.batch_size = 16
         self.unscaled_size = (1280, 720)
         self.img_size = (416, 416)
@@ -28,22 +39,41 @@ class Datamodule(pl.LightningDataModule):
         self.ann_transform = transforms.Compose([NormalizeBbox(self.unscaled_size)])
 
     def prepare_data(self):
-        return
+        return  # TODO: introduce a checksum or sth like that for conditional preprocessing (if needed)
         pklot_preprocessor.preprocess("data/pklot")
 
-    def setup(self, stage=None, train_val_seed=2136, test_seed=2136):
+    def setup(
+        self,
+        stage=None,
+    ):
         pklot_dataset = PkLotDataset(
             "data/pklot", self.img_transform, self.ann_transform
         )
         dataset = ConcatDataset([pklot_dataset])
 
         dataset, self.test_dataset = random_split(
-            dataset, [9 / 10, 1 / 10], Generator().manual_seed(test_seed)
+            dataset, [9 / 10, 1 / 10], Generator().manual_seed(self.test_seed)
         )
 
         self.train_dataset, self.val_dataset = random_split(
-            dataset, [8 / 9, 1 / 9], Generator().manual_seed(train_val_seed)
+            dataset, [8 / 9, 1 / 9], Generator().manual_seed(self.train_val_seed)
         )
+        if self.size_limit > 0:
+
+            def _split_size_limit(dataset: Dataset):
+                sample_count = self.size_limit * self.batch_size
+                return random_split(
+                    dataset,
+                    [
+                        min(sample_count, len(dataset)),
+                        max(len(dataset) - sample_count, 0),
+                    ],
+                    Generator().manual_seed(self.size_limit_seed),
+                )[0]
+
+            self.test_dataset = _split_size_limit(self.test_dataset)
+            self.train_dataset = _split_size_limit(self.train_dataset)
+            self.val_dataset = _split_size_limit(self.val_dataset)
 
     @staticmethod
     def _collate_fn(batch):
