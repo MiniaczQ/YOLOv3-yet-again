@@ -152,7 +152,9 @@ class YoloV3Module(pl.LightningModule):
             expected[..., 4][mask_noobj].clamp(0, 1),
         )
         loss_obj = loss_obj_obj + loss_obj_noobj
-        loss_cls = F.binary_cross_entropy(predicted[..., 5:], expected[..., 5:])
+        loss_cls = F.binary_cross_entropy(
+            predicted[..., 5:][mask_obj], expected[..., 5:][mask_obj]
+        )
         return loss_x + loss_y + loss_w + loss_h + loss_obj + loss_cls
 
     def _common_step(self, batch: list, batch_idx: int):
