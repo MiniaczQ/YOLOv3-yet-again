@@ -84,11 +84,6 @@ class NormalizeBbox:
         return annotation
 
 
-# Unsqueeze
-def unsqueeze_dim0(t: Tensor) -> Tensor:
-    return t.unsqueeze(0)
-
-
 # Based on https://blog.paperspace.com/how-to-implement-a-yolo-v3-object-detector-from-scratch-in-pytorch-part-3/
 # Normalize a batch of predictions from 1 detector
 def normalize_model_output(bpreds: Tensor, num_anchors: int, bbox_attrs: int) -> Tensor:

@@ -34,7 +34,7 @@ def main():
     out_dir = Path(datetime.now().strftime("detection_results/coco/%Y_%m_%d_%H_%M_%S"))
     with torch.no_grad():
         process_results(results, 416, True, False, out_dir, coco_labels.labels)
-    display_dir(out_dir)
+    # display_dir(out_dir)
 
 
 if __name__ == "__main__":

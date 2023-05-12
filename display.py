@@ -9,8 +9,8 @@ import matplotlib.pyplot as pt
 
 # Clamp rectangles in another rectangle
 def clamp_rect(rects: Tensor, rect):
-    rects[..., [0, 2]].clamp_(rect[0], rect[2])
-    rects[..., [1, 3]].clamp_(rect[1], rect[3])
+    rects[..., [0, 2]] = rects[..., [0, 2]].clamp(rect[0], rect[2])
+    rects[..., [1, 3]] = rects[..., [1, 3]].clamp(rect[1], rect[3])
     return rects
 
 
@@ -36,7 +36,7 @@ def finalize_predictions(preds: Tensor):
 
 
 def print_prediction(pred: Tensor, label):
-    text = f"{label} {pred[4]/100}"
+    text = f"{label} {pred[4]/100:4.2}"
     position = f"{pred[0]:5}, {pred[1]:5}, {pred[2]:5}, {pred[3]:5}"
     print(f"- {text} ({position})")
 
@@ -49,7 +49,7 @@ C_CLASS = lambda id: tuple(
 
 # Draw a single prediction onto the image
 def draw_prediction(draw: ImageDraw.ImageDraw, pred, label):
-    text = f"{label} {pred[4]/100}"
+    text = f"{label} {pred[4]/100:4.2}"
     (tx, ty) = draw.textsize(text)
     rect_color = C_CLASS(pred[5])
     draw.rectangle((pred[0], pred[1], pred[0] + tx, pred[1] + ty), rect_color)
@@ -67,8 +67,14 @@ def process_results(
     out_dir=None,
     labels=None,
 ):
-    if out_dir is not None:
-        makedirs(out_dir)
+    if labels is not None:
+        label_pad = max([len(l) for l in labels])
+    else:
+        label_pad = math.ceil(
+            math.log10(
+                max([max([max(preds[5]) for preds in batch]) for batch in results])
+            )
+        )
     for batch in results:
         for path, predictions, raw_image in zip(*batch):
             ow, oh = raw_image.width, raw_image.height
@@ -79,17 +85,19 @@ def process_results(
             if console:
                 print(f"Image `{path}`")
             for pred in predictions:
-                pred = clamp_rect(pred.clone(), (0, 0, 415, 415))
-                pred = unpad(pred, ((out_size - nw) // 2, (out_size - nh) // 2))
+                pred = unpad(pred.clone(), ((out_size - nw) // 2, (out_size - nh) // 2))
                 pred = scale(pred, (ratio, ratio))
+                pred = clamp_rect(pred, (0, 0, ow - 1, oh - 1))
                 pred = finalize_predictions(pred)
                 label = labels[pred[5]] if labels else str(pred[5] + 1)
                 if console:
-                    print_prediction(pred, label)
+                    print_prediction(pred, f"{label:{label_pad}}")
                 if out_dir is not None or show:
                     draw_prediction(draw, pred, label)
             if out_dir is not None:
-                raw_image.save(out_dir.joinpath(path))
+                save_path = out_dir.joinpath(path)
+                makedirs(save_path.parent, exist_ok=True)
+                raw_image.save(save_path)
             if show:
                 raw_image.show()
 
