@@ -59,28 +59,16 @@ class NormalizeBbox:
 
     def __call__(self, annotation: torch.Tensor) -> torch.Tensor:
         annotation = annotation.clone().float()
-        ratio = self.image_size[0] / self.image_size[1]
-        annotation[..., [1, 3]] = self._map_linearly(
-            annotation[..., [1, 3]], (0, self.image_size[0] - 1), (0, 1)
-        )
-        annotation[..., [2, 4]] = self._map_linearly(
-            annotation[..., [2, 4]], (0, self.image_size[1] - 1), (0, 1)
-        )
-        if self.padded and ratio < 1:
-            annotation[..., 1] = self._map_linearly(
-                annotation[..., 1], (0, 1), ((1 - ratio) / 2, (1 + ratio) / 2)
-            )
-            annotation[..., 3] = self._map_linearly(
-                annotation[..., 3], (0, 1), (0, ratio)
-            )
-        if self.padded and ratio > 1:
-            inv_ratio = 1 / ratio
-            annotation[..., 2] = self._map_linearly(
-                annotation[..., 2], (0, 1), ((1 - inv_ratio) / 2, (1 + inv_ratio) / 2)
-            )
-            annotation[..., 4] = self._map_linearly(
-                annotation[..., 4], (0, 1), (0, inv_ratio)
-            )
+        sizes = annotation[..., 3:5] - annotation[..., 1:3]
+        annotation[..., 1:] = torch.cat((annotation[..., 1:3] + sizes / 2, sizes), 1)
+        max_size = max(self.image_size)
+        size_diff = (max_size - min(self.image_size)) / 2
+        if self.image_size[0] > self.image_size[1]:
+            padding = torch.tensor([0, size_diff])
+        else:
+            padding = torch.tensor([size_diff, 0])
+        annotation[..., 1:3] = annotation[..., 1:3] + padding
+        annotation[..., 1:] = annotation[..., 1:] / max_size
         return annotation
 
 
@@ -129,6 +117,25 @@ def process_anchor(
     xy = (torch.sigmoid(bpreds[..., [0, 1]]) + grid) * stride
     wh = torch.exp(bpreds[..., [2, 3]]) * anchors.view(1, num_anchors, 1, 1, 2)
     attr = torch.sigmoid(bpreds[..., 4:])
+    return torch.cat([xy, wh, attr], 4).view(batch_size, -1, bbox_attrs)
+
+
+def process_output_without_sigmoid(
+    bpreds: Tensor, inp_dim: int, anchors: Tensor, num_classes: int
+) -> Tensor:
+    num_anchors = anchors.size(0)
+    batch_size = bpreds.size(0)
+    pred_dim = bpreds.size(2)
+    bbox_attrs = 5 + num_classes
+    stride = inp_dim // pred_dim
+    # B x A x H x W x (5+N)
+    grid_axis = torch.arange(pred_dim, dtype=torch.float32, device=bpreds.device)
+    grid = torch.cartesian_prod(grid_axis, grid_axis).view(1, 1, pred_dim, pred_dim, 2)[
+        ..., [1, 0]
+    ]
+    xy = (bpreds[..., [0, 1]] + grid) * stride
+    wh = torch.exp(bpreds[..., [2, 3]]) * anchors.view(1, num_anchors, 1, 1, 2)
+    attr = bpreds[..., 4:]
     return torch.cat([xy, wh, attr], 4).view(batch_size, -1, bbox_attrs)
 
 

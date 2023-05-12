@@ -8,6 +8,7 @@ from os import remove
 
 
 def preprocess(root, silent=True):
+    # TODO: clean all existing .data
     printed = True
     root = Path(root)
     images = list(root.rglob("*.jpg"))
@@ -21,21 +22,31 @@ def preprocess(root, silent=True):
             annotations_path = image.with_suffix(".xml")
             annotations_xml = ET.parse(annotations_path)
             for space in annotations_xml.iterfind("space"):
-                occupied = int(space.attrib["occupied"])
-                min_x, min_y = 2**32 - 1, 2**32 - 1
+                try:
+                    occupied = int(space.attrib["occupied"])
+                except:
+                    print(f"Skipping bbox without occupied attribute for image {image}")
+                    continue
+                any_point_found = False
+                min_x, min_y = 2**31 - 1, 2**31 - 1
                 max_x, max_y = 0, 0
                 for point in space.find("contour").iterfind("point"):
+                    any_point_found = True
                     x = int(point.attrib["x"])
                     min_x = min(min_x, x)
                     max_x = max(max_x, x)
                     y = int(point.attrib["y"])
                     min_y = min(min_y, y)
                     max_y = max(max_y, y)
-                data.append([occupied, min_x, min_y, max_x, max_y])
+                if any_point_found:
+                    data.append([occupied, min_x, min_y, max_x, max_y])
         except Exception as e:
             if not silent:
                 print(f"Image {image} encountered exception {type(e).__name__}: {e}")
             errors += 1
+            continue
+        if len(data) < 1:
+            print(f"Skipping image {image} because no labels were correct")
             continue
         data = torch.tensor(data)
         if not printed:

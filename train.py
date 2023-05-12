@@ -8,10 +8,11 @@ from datetime import datetime
 
 
 def main():
+    torch.manual_seed(123)
     torch.set_float32_matmul_precision("medium")
     trainer = Trainer(
         auto_scale_batch_size=False,
-        accelerator="gpu",
+        accelerator="cpu",
         devices=1,
         logger=True,
         max_epochs=500,
@@ -28,9 +29,9 @@ def main():
         benchmark=False,
     )
     model = YoloV3Module(2)
-    model.load_from_checkpoint(
-        "model_checkpoints/2023-05-12_08-00-41/model-epoch=01-val_loss_mean=5.16.ckpt"
-    )
+    # model.load_from_checkpoint(
+    #     "model_checkpoints/2023-05-12_08-00-41/model-epoch=01-val_loss_mean=5.16.ckpt"
+    # )
     # for name, param in model.named_parameters():
     #     print(name, param.requires_grad)
     # ds = SimpleDataset("testimgs")
@@ -39,7 +40,7 @@ def main():
     # bsaabbs = trainer.predict(model, dl)
     # show_results(ds, batch_size, bsaabbs)
     # summary(model.model, (1, 3, 416, 416))
-    dm = Datamodule(16)
+    dm = Datamodule(0)
     dm.batch_size = 8
     dm.prepare_data()
     dm.setup()

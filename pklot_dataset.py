@@ -14,7 +14,8 @@ class PkLotDataset(Dataset):
 
     def __getitem__(self, i):
         data_paths = self.ann_paths[i]
-        img = Image.open(data_paths.with_suffix(".jpg")).convert("RGB")
+        img_path = data_paths.with_suffix(".jpg")
+        img = raw_img = Image.open(img_path).convert("RGB")
         if self.img_transform is not None:
             img = self.img_transform(img)
 
@@ -22,7 +23,7 @@ class PkLotDataset(Dataset):
         if self.ann_transform is not None:
             ann = self.ann_transform(ann)
 
-        return img, ann
+        return img, ann, str(img_path.name), raw_img
 
     def __len__(self):
         return len(self.ann_paths)

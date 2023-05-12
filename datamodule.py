@@ -61,7 +61,9 @@ class Datamodule(pl.LightningDataModule):
             ],
             0,
         )
-        return (image_batch, annotation_batch)
+        path_batch = [elem[2] for elem in batch]
+        raw_image_batch = [elem[3] for elem in batch]
+        return (image_batch, annotation_batch, path_batch, raw_image_batch)
 
     def train_dataloader(self):
         return DataLoader(

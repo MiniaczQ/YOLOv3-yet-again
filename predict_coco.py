@@ -25,8 +25,9 @@ def main():
         False,
         collate_fn=lambda x: (
             list([i[0] for i in x]),
-            torch.stack([i[1] for i in x]),
+            list([i[1] for i in x]),
             list([i[2] for i in x]),
+            list([i[3] for i in x]),
         ),
     )
     results = trainer.predict(model, dl)
