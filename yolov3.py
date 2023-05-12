@@ -42,8 +42,8 @@ class YoloV3Module(pl.LightningModule):
             load_model_from_file(
                 self.model.backbone, "pretrained_weights/darknet53.conv.74"
             )
-        for p in self.model.backbone.parameters():
-            p.requires_grad = False
+        # for p in self.model.backbone.parameters():
+        #    p.requires_grad = False
 
         self.epoch_train_loss_sum = 0
 
@@ -229,7 +229,7 @@ class YoloV3Module(pl.LightningModule):
         return paths, results, raw_images
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(
-            self.parameters(), lr=self.learning_rate, weight_decay=0.0005, momentum=0.9
+        optimizer = torch.optim.Adam(
+            self.parameters(), lr=self.learning_rate, weight_decay=0.0005
         )
         return optimizer
