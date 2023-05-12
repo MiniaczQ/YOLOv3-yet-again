@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import torch
 from torchvision.ops import nms, box_iou
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 
 # Squares off the image with padding
@@ -179,7 +180,7 @@ def non_max_supression(bpreds: Tensor, conf_threshold, size_limits, iou_threshol
         confs, ids = preds[:, 5:].max(1)
         # Include objectness in class probability
         confs *= preds[:, 4]
-        # Reduce predictions to x, y, w, h, class probability, class id
+        # Reduce predictions to x1, y1, x2, y2, class probability, class id
         preds = torch.cat([boxes, confs.view(-1, 1), ids.view(-1, 1)], 1)
         # Filter away low probability classes
         preds = preds[confs > conf_threshold]
@@ -190,9 +191,7 @@ def non_max_supression(bpreds: Tensor, conf_threshold, size_limits, iou_threshol
             continue
         # Batched nms
         classes = preds[:, 5]  # classes
-        boxes = (
-            preds[:, :4].clone() + classes.view(-1, 1) * size_limits[1]
-        )  # boxes (offset by class)
+        boxes = preds[:, :4].clone() + classes.view(-1, 1) * size_limits[1]
         scores = preds[:, 4]
         idxs = nms(boxes, scores, iou_threshold)
         # Box merging using weighted mean
@@ -207,3 +206,38 @@ def non_max_supression(bpreds: Tensor, conf_threshold, size_limits, iou_threshol
             )
         results.append(preds[idxs])
     return results
+
+
+# Predictions as:
+# batch[image[prediction[x1, y1, x2, y2, class, confidence]]]
+# Targets as:
+# batch[prediction[img_id, class, x, y, w, h]]
+# Because no time to refactor
+def calculate_map(batch_preds, batch_targs):
+    map = MeanAveragePrecision()
+    # Process targets to the same format as predictions
+    batch_targs = xywh_to_rect(batch_targs[:, [2, 3, 4, 5, 1, 0]])
+    batch_targs[:, [0, 1, 2, 3]] * 416
+    batch_img_targs = []
+    for img_id in range(len(batch_preds)):
+        mask = batch_targs[:, 5] == img_id
+        batch_img_targs.append(batch_targs[mask, :])
+    # Update mAP for each image in batch
+    update_preds = []
+    update_targs = []
+    for targets, predictions in zip(batch_img_targs, batch_preds):
+        update_preds.append(
+            dict(
+                boxes=predictions[:, [0, 1, 2, 3]],
+                scores=predictions[:, 5],
+                labels=predictions[:, 4],
+            )
+        )
+        update_targs.append(
+            dict(
+                boxes=targets[:, [0, 1, 2, 3]],
+                labels=targets[:, 4],
+            )
+        )
+    map.update(update_preds, update_targs)
+    return map.compute()
