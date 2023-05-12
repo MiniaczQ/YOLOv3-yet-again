@@ -1,11 +1,12 @@
 from os import makedirs
 from pathlib import Path
-from PIL import ImageDraw, Image
+from PIL import ImageDraw
 from torch import Tensor
 import colorsys
 import math
 import matplotlib.pyplot as pt
 import matplotlib as mpl
+from shutil import rmtree
 
 
 # Clamp rectangles in another rectangle
@@ -75,6 +76,11 @@ def process_results(
     out_dir=None,
     labels=None,
 ):
+    show = False
+    if out_dir is not None:
+        out_dir = Path(out_dir)
+        if out_dir.exists():
+            rmtree(out_dir)
     if labels is not None:
         label_pad = max([len(l) for l in labels])
     else:

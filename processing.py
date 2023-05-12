@@ -2,7 +2,7 @@ from torch import Tensor
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import torch
-from torchvision.ops import nms
+from torchvision.ops import nms, box_iou
 
 
 # Squares off the image with padding
@@ -195,14 +195,15 @@ def non_max_supression(bpreds: Tensor, conf_threshold, size_limits, iou_threshol
         )  # boxes (offset by class)
         scores = preds[:, 4]
         idxs = nms(boxes, scores, iou_threshold)
-        if 1 < num_boxes:  # Merge NMS (boxes merged using weighted mean)
-            try:  # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
-                iou = boxes.box_iou(boxes[idxs], boxes) > iou_threshold  # iou matrix
-                weights = iou * scores[None]  # box weights
-                preds[idxs, :4] = torch.mm(weights, preds[:, :4]).float() / weights.sum(
-                    1, keepdim=True
-                )  # merged boxes
-            except:
-                pass
+        # Box merging using weighted mean
+        if 1 < num_boxes:
+            # IoU for each pair of nms selected boxes and original boxes; len(idxs) x len(boxes)
+            iou = box_iou(boxes[idxs], boxes) > iou_threshold
+            # Weight of each intersection
+            weights = iou * scores.view(1, -1)
+            # Merging
+            preds[idxs, :4] = torch.mm(weights, preds[:, :4]).float() / weights.sum(
+                1, keepdim=True
+            )
         results.append(preds[idxs])
     return results

@@ -32,7 +32,7 @@ def main():
     results = trainer.predict(model, dl)
 
     with torch.no_grad():
-        process_results(results, 416, False, 8, None, coco_labels.labels)
+        process_results(results, 416, False, 0, "./detection_results/coco/", coco_labels.labels)
 
 
 if __name__ == "__main__":
