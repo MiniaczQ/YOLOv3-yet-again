@@ -161,6 +161,7 @@ cython_debug/
 
 data
 pretrained_weights
-test_images
 detection_results
 model_checkpoints
+lightning_logs
+test*

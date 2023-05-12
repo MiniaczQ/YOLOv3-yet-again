@@ -2,20 +2,9 @@ from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
 from datamodule import Datamodule
-
 from yolov3 import YoloV3Module
 from lightning.pytorch.callbacks import ModelCheckpoint
-
-MODEL_CKPT_PATH = "model/"
-MODEL_CKPT = "model-{epoch:02d}-{val_loss:.2f}"
-
-checkpoint_callback = ModelCheckpoint(
-    monitor="val_loss",
-    dirpath=MODEL_CKPT_PATH,
-    filename=MODEL_CKPT,
-    save_top_k=3,
-    mode="min",
-)
+from datetime import datetime
 
 
 def main():
@@ -29,7 +18,7 @@ def main():
         callbacks=[
             ModelCheckpoint(
                 monitor="val_loss_mean",
-                dirpath=datetime.now().strftime("model/%Y-%m-%d_%H-%M-%S/"),
+                dirpath=datetime.now().strftime("model_checkpoints/%Y-%m-%d_%H-%M-%S/"),
                 filename="model-{epoch:02d}-{val_loss_mean:.2f}",
                 save_top_k=3,
                 mode="min",
@@ -38,9 +27,10 @@ def main():
         # overfit_batches=1,
         benchmark=False,
     )
-    full_model = YoloV3Module(80)
     model = YoloV3Module(2)
-    model.model.backbone = full_model.model.backbone
+    model.load_from_checkpoint(
+        "model_checkpoints/2023-05-12_08-00-41/model-epoch=01-val_loss_mean=5.16.ckpt"
+    )
     # for name, param in model.named_parameters():
     #     print(name, param.requires_grad)
     # ds = SimpleDataset("testimgs")
@@ -49,8 +39,8 @@ def main():
     # bsaabbs = trainer.predict(model, dl)
     # show_results(ds, batch_size, bsaabbs)
     # summary(model.model, (1, 3, 416, 416))
-    dm = Datamodule(8)
-    dm.batch_size = 32
+    dm = Datamodule(16)
+    dm.batch_size = 8
     dm.prepare_data()
     dm.setup()
     # dl = dm.train_dataloader(0)

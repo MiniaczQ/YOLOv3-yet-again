@@ -1,11 +1,10 @@
 from os import makedirs
-from datetime import datetime
 from pathlib import Path
-from PIL import ImageDraw
-import torch
+from PIL import ImageDraw, Image
 from torch import Tensor
 import colorsys
 import math
+import matplotlib.pyplot as pt
 
 
 # Clamp rectangles in another rectangle
@@ -32,13 +31,14 @@ def unpad(rects: Tensor, padding):
 # Represent confidence in percentage and turn predictions into integer lists
 def finalize_predictions(preds: Tensor):
     preds[..., 4] *= 100
-    preds[..., 5] += 1
     preds = preds.int().tolist()
     return preds
 
 
-def print_prediction(p: Tensor):
-    print(f"{p[5]:5} {p[4]/100} ({p[0]:5}, {p[1]:5}, {p[2]:5}, {p[3]:5})")
+def print_prediction(pred: Tensor, label):
+    text = f"{label} {pred[4]/100}"
+    position = f"{pred[0]:5}, {pred[1]:5}, {pred[2]:5}, {pred[3]:5}"
+    print(f"- {text} ({position})")
 
 
 C_WHITE = (255, 255, 255)
@@ -48,8 +48,8 @@ C_CLASS = lambda id: tuple(
 
 
 # Draw a single prediction onto the image
-def draw_prediction(draw: ImageDraw.ImageDraw, pred):
-    text = f"{pred[5]}:{pred[4]/100}"
+def draw_prediction(draw: ImageDraw.ImageDraw, pred, label):
+    text = f"{label} {pred[4]/100}"
     (tx, ty) = draw.textsize(text)
     rect_color = C_CLASS(pred[5])
     draw.rectangle((pred[0], pred[1], pred[0] + tx, pred[1] + ty), rect_color)
@@ -57,10 +57,18 @@ def draw_prediction(draw: ImageDraw.ImageDraw, pred):
     draw.text((pred[0], pred[1]), text, C_WHITE)
 
 
-# confirmed with another model as long as model input was 416x416 (no letterboxing)
-def show_results(results, out_size):
-    results_dir = Path(datetime.now().strftime("detection_results/%Y_%m_%d_%H_%M_%S"))
-    makedirs(results_dir)
+# Process multiple batches of predictions
+# Letterboxing not supported
+def process_results(
+    results,
+    out_size,
+    console=False,
+    show=False,
+    out_dir=None,
+    labels=None,
+):
+    if out_dir is not None:
+        makedirs(out_dir)
     for batch in results:
         for path, predictions, raw_image in zip(*batch):
             ow, oh = raw_image.width, raw_image.height
@@ -68,10 +76,31 @@ def show_results(results, out_size):
             ratio = om / out_size
             nw, nh = int(round(ow / ratio)), int(round(oh / ratio))
             draw = ImageDraw.Draw(raw_image)
+            if console:
+                print(f"Image `{path}`")
             for pred in predictions:
                 pred = clamp_rect(pred.clone(), (0, 0, 415, 415))
                 pred = unpad(pred, ((out_size - nw) // 2, (out_size - nh) // 2))
                 pred = scale(pred, (ratio, ratio))
                 pred = finalize_predictions(pred)
-                draw_prediction(draw, pred)
-            raw_image.save(results_dir.joinpath(path))
+                label = labels[pred[5]] if labels else str(pred[5] + 1)
+                if console:
+                    print_prediction(pred, label)
+                if out_dir is not None or show:
+                    draw_prediction(draw, pred, label)
+            if out_dir is not None:
+                raw_image.save(out_dir.joinpath(path))
+            if show:
+                raw_image.show()
+
+
+def display_dir(path: Path):
+    images = []
+    for file in path.iterdir():
+        if file.suffix == ".jpg":
+            images.append(file)
+    fig, ax = pt.subplots(len(images))
+    for i, file in enumerate(images):
+        image = Image.open(file)
+        ax[i].imshow(image)
+    pt.show()
