@@ -4,7 +4,7 @@ from lightning import Trainer
 import torch
 from torch.utils.data import DataLoader
 from yolov3 import YoloV3Module
-from display import display_dir, process_results
+from display import process_results
 from simple_dataset import SimpleDataset
 import coco_labels
 
@@ -31,10 +31,8 @@ def main():
     )
     results = trainer.predict(model, dl)
 
-    out_dir = Path(datetime.now().strftime("detection_results/coco/%Y_%m_%d_%H_%M_%S"))
     with torch.no_grad():
-        process_results(results, 416, True, False, out_dir, coco_labels.labels)
-    # display_dir(out_dir)
+        process_results(results, 416, False, 8, None, coco_labels.labels)
 
 
 if __name__ == "__main__":

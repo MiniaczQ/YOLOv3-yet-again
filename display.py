@@ -5,6 +5,7 @@ from torch import Tensor
 import colorsys
 import math
 import matplotlib.pyplot as pt
+import matplotlib as mpl
 
 
 # Clamp rectangles in another rectangle
@@ -57,13 +58,20 @@ def draw_prediction(draw: ImageDraw.ImageDraw, pred, label):
     draw.text((pred[0], pred[1]), text, C_WHITE)
 
 
+def add_image(image):
+    pt.figure()
+    pt.axis("off")
+    pt.tight_layout()
+    pt.imshow(image)
+
+
 # Process multiple batches of predictions
 # Letterboxing not supported
 def process_results(
     results,
     out_size,
     console=False,
-    show=False,
+    show_n=0,
     out_dir=None,
     labels=None,
 ):
@@ -75,6 +83,9 @@ def process_results(
                 max([max([max(preds[5]) for preds in batch]) for batch in results])
             )
         )
+    if show_n != 0:
+        mpl.rcParams["figure.max_open_warning"] = 0
+        show = True
     for batch in results:
         for path, predictions, raw_image in zip(*batch):
             ow, oh = raw_image.width, raw_image.height
@@ -92,23 +103,14 @@ def process_results(
                 label = labels[pred[5]] if labels else str(pred[5] + 1)
                 if console:
                     print_prediction(pred, f"{label:{label_pad}}")
-                if out_dir is not None or show:
+                if out_dir is not None or show_n:
                     draw_prediction(draw, pred, label)
             if out_dir is not None:
                 save_path = out_dir.joinpath(path)
                 makedirs(save_path.parent, exist_ok=True)
                 raw_image.save(save_path)
-            if show:
-                raw_image.show()
-
-
-def display_dir(path: Path):
-    images = []
-    for file in path.iterdir():
-        if file.suffix == ".jpg":
-            images.append(file)
-    fig, ax = pt.subplots(len(images))
-    for i, file in enumerate(images):
-        image = Image.open(file)
-        ax[i].imshow(image)
-    pt.show()
+            if show_n > 0:
+                add_image(raw_image)
+                show_n -= 1
+    if show is not None and show:
+        pt.show()
