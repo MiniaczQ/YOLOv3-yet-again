@@ -1,15 +1,22 @@
 from lightning import Trainer
+
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
-from datamodule import Datamodule
+
+from datamodule import DataModule
+
 from yolov3 import YoloV3Module
+
 from lightning.pytorch.callbacks import ModelCheckpoint
+
 from datetime import datetime
 
 
 def main():
     torch.manual_seed(123)
+
     torch.set_float32_matmul_precision("medium")
+
     trainer = Trainer(
         auto_scale_batch_size=False,
         accelerator="gpu",
@@ -47,26 +54,14 @@ def main():
         # overfit_batches=1,
         benchmark=False,
     )
+
     model = YoloV3Module(2)
-    # model.load_from_checkpoint(
-    #     "model_checkpoints/2023-05-12_08-00-41/model-epoch=01-val_loss_mean=5.16.ckpt"
-    # )
-    # for name, param in model.named_parameters():
-    #     print(name, param.requires_grad)
-    # ds = SimpleDataset("testimgs")
-    # batch_size = 5
-    # dl = DataLoader(ds, batch_size, False)
-    # bsaabbs = trainer.predict(model, dl)
-    # show_results(ds, batch_size, bsaabbs)
-    # summary(model.model, (1, 3, 416, 416))
-    dm = Datamodule(12)
+
+    dm = DataModule(12)
     dm.batch_size = 16
-    dm.prepare_data()
+    # dm.prepare_data()
     dm.setup()
-    # dl = dm.train_dataloader(0)
-    # data = next(iter(dl))
-    # print(data)
-    # model.training_step(data, 0)
+
     # tuner = trainer.tuner
     # tuner.scale_batch_size(model=model, datamodule=dm)
     trainer.fit(model=model, datamodule=dm)

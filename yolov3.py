@@ -15,6 +15,7 @@ from processing import (
 )
 
 
+# YOLOv3 module with pre- and postprocessing
 class YoloV3Module(pl.LightningModule):
     def __init__(
         self,
