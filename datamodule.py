@@ -48,7 +48,8 @@ class DataModule(pl.LightningDataModule):
         self.ann_transform = transforms.Compose([NormalizeBbox(self.unscaled_size)])
 
     def prepare_data(self):
-        pklot_preprocessor.preprocess("data/PKLot", True, True)
+        pass
+        # pklot_preprocessor.preprocess("data/PKLot", True, True)
 
     def setup(
         self,

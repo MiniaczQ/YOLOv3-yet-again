@@ -12,7 +12,7 @@ from os import remove
 # Labels are saved as .data files with tensor([[occupied, min_x, min_y, max_x, max_y]]) format
 def preprocess(root, silent=True, remove_old=False):
     if remove_old:
-        for file in root.rglob("*.data"):
+        for file in Path(root).rglob("*.data"):
             remove(file)
     printed = True
     root = Path(root)
@@ -67,7 +67,7 @@ def preprocess(root, silent=True, remove_old=False):
 
 
 def main():
-    preprocess("data/pklot", False)
+    preprocess("data/pklot", False, True)
 
 
 if __name__ == "__main__":
