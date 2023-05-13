@@ -6,7 +6,13 @@ import torch
 from torch import Tensor
 import torch.nn.functional as F
 from torchvision.ops import box_iou
-from processing import non_max_supression, process_anchor, normalize_model_output
+from processing import (
+    calculate_map,
+    non_max_supression,
+    process_anchor,
+    normalize_model_output,
+    process_output_without_sigmoid,
+)
 
 
 class YoloV3Module(pl.LightningModule):
@@ -66,8 +72,6 @@ class YoloV3Module(pl.LightningModule):
         anchors = anchors / anchor_scale
         assert output_size[2] == output_size[3]
         obj_mask = torch.zeros(output_size[:-1], dtype=torch.bool, device=self.device)
-        class_mask = torch.zeros(output_size[:-1], device=self.device)
-        iou_scores = torch.zeros(output_size[:-1], device=self.device)
         processed = torch.zeros(output_size, device=self.device)
 
         image_batch_ids = annotations[..., 0].long().clamp(0, batch_size - 1).t()
@@ -115,19 +119,7 @@ class YoloV3Module(pl.LightningModule):
         processed[..., 4] = obj_mask.float()
         processed[image_batch_ids, best_anchors, row, col, 5 + class_ids] = 1
 
-        outputs_bbox = outputs[image_batch_ids, best_anchors, row, col, :4]
-        outputs_probabilities = outputs[image_batch_ids, best_anchors, row, col, 5:]
-        outputs_class_ids = torch.max(outputs_probabilities, dim=-1).indices
-        class_mask[image_batch_ids, best_anchors, row, col] = (
-            outputs_class_ids == class_ids
-        ).float()
-
-        iou_scores[image_batch_ids, best_anchors, row, col] = box_iou(
-            _x1y1x2y2_from_xywh(outputs_bbox),
-            _x1y1x2y2_from_xywh(processed_bbox),
-        ).diag()
-
-        return (processed, obj_mask, noobj_mask, class_mask, iou_scores)
+        return processed, obj_mask, noobj_mask
 
     # based on: https://towardsdatascience.com/calculating-loss-of-yolo-v3-layer-8878bfaaf1ff
     def _compute_loss(
@@ -152,7 +144,9 @@ class YoloV3Module(pl.LightningModule):
             expected[..., 4][mask_noobj].clamp(0, 1),
         )
         loss_obj = loss_obj_obj + loss_obj_noobj
-        loss_cls = F.binary_cross_entropy(predicted[..., 5:], expected[..., 5:])
+        loss_cls = F.binary_cross_entropy(
+            predicted[..., 5:][mask_obj], expected[..., 5:][mask_obj]
+        )
         return loss_x + loss_y + loss_w + loss_h + loss_obj + loss_cls
 
     def _common_step(self, batch: list, batch_idx: int):
@@ -163,28 +157,32 @@ class YoloV3Module(pl.LightningModule):
         #     where (x, y): center, (w, h): size, [0..1] wrt width or height
         #     and image_id identifies images within a single image batch
         input, annotations, paths, raw_input = batch
-        loss, processed_annotations = {}, {}
+        loss = {}
         # outputs: Size([batch_size, anchors * (bbox + obj + num_classes), grid_size, grid_size]) for each head
         #     where anchors: 3, bbox: 4, obj: 1, num_classes: 2
-        outputs = dict(zip(self.head_names, self(input)))
-        for i, (head_name, head_outputs) in enumerate(outputs.items()):
+        outputs = self(input)
+        outputs_copy = dict(
+            zip(self.head_names, [out.clone().detach() for out in outputs])
+        )
+        for i, (head_name, head_outputs) in enumerate(zip(self.head_names, outputs)):
             num_anchors = self.anchors.size(0)
             bbox_attrs = 5 + self.num_classes
             # resizing to: Size([batch_size, anchors, grid_size, grid_size, (bbox + obj + num_classes)])
             #     and using sigmoid to ensure [0..1] for x, y, objectness and per-class probabilities
             head_outputs = normalize_model_output(head_outputs, num_anchors, bbox_attrs)
+            if annotations is None or len(annotations) == 0:
+                loss[head_name] = 0
+                continue
             (
-                processed_annotations[head_name],
+                processed_annotations,
                 mask_obj,
                 mask_noobj,
-                mask_class,
-                iou_scores,
             ) = self._process_annotations(
                 head_outputs, annotations, self.anchors[i].to(self.device)
             )
             loss[head_name] = self._compute_loss(
                 head_outputs,
-                processed_annotations[head_name],
+                processed_annotations,
                 mask_obj,
                 mask_noobj,
             )
@@ -193,10 +191,23 @@ class YoloV3Module(pl.LightningModule):
             + loss[self.head_names[1]]
             + loss[self.head_names[2]]
         )
-        return total_loss, outputs, processed_annotations
+        if self.anchors.device != self.device:
+            self.anchors = self.anchors.to(self.device)
+        anchors = self.anchors
+        input_size = self.input_size
+        num_classes = self.num_classes
+        # Turn raw model output into x, y, w, h, objectness confidence, class probabilities
+        bx52 = process_anchor(outputs_copy["x52"], input_size, anchors[0], num_classes)
+        bx26 = process_anchor(outputs_copy["x26"], input_size, anchors[1], num_classes)
+        bx13 = process_anchor(outputs_copy["x13"], input_size, anchors[2], num_classes)
+        bpreds = torch.cat([bx52, bx26, bx13], dim=1)
+        results = non_max_supression(
+            bpreds, self.conf_threshold, self.size_limits, self.iou_threshold
+        )
+        return total_loss, results, annotations, paths, raw_input
 
     def training_step(self, batch: list, batch_idx: int):
-        loss, _, _ = self._common_step(batch, batch_idx)
+        loss, _, _, _, _ = self._common_step(batch, batch_idx)
         # with open("./total_loss_grad_graph.txt", "w") as f:
         #     f.write(torchviz.make_dot(total_loss).__str__())
         return {"loss": loss}
@@ -207,29 +218,35 @@ class YoloV3Module(pl.LightningModule):
 
     def validation_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
-            loss, _, _ = self._common_step(batch, batch_idx)
-        return {"val_loss": loss}
+            loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
+            if batch_idx == 0:
+                all_maps = calculate_map(results, annotations)
+                self.log("val_map_50", all_maps["map_50"], on_epoch=True)
+                self.log("val_map_75", all_maps["map_75"], on_epoch=True)
+                self.log("val_map_50_95", all_maps["map"], on_epoch=True)
+            return {"val_loss": loss}
 
     def validation_epoch_end(self, outs):
         avg_loss = torch.stack([out["val_loss"] for out in outs]).mean()
         self.log("val_loss_mean", avg_loss)
 
+    def test_step(self, batch: list, batch_idx: int):
+        with torch.no_grad():
+            loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
+            if batch_idx == 0:
+                all_maps = calculate_map(results, annotations)
+                self.log("test_map_50", all_maps["map_50"], on_epoch=True)
+                self.log("test_map_75", all_maps["map_75"], on_epoch=True)
+                self.log("test_map_50_95", all_maps["map"], on_epoch=True)
+            return {"test_loss": loss}
+
+    def test_epoch_end(self, outs):
+        avg_loss = torch.stack([out["test_loss"] for out in outs]).mean()
+        self.log("test_loss_mean", avg_loss)
+
     def predict_step(self, batch, batch_idx):
-        images, _, paths, raw_images = batch
-        (bx52, bx26, bx13) = self(images)
-        if self.anchors.device != self.device:
-            self.anchors = self.anchors.to(self.device)
-        anchors = self.anchors
-        input_size = self.input_size
-        num_classes = self.num_classes
-        # Turn raw model output into x, y, w, h, objectness confidence, class probabilities
-        bx52 = process_anchor(bx52, input_size, anchors[0], num_classes)
-        bx26 = process_anchor(bx26, input_size, anchors[1], num_classes)
-        bx13 = process_anchor(bx13, input_size, anchors[2], num_classes)
-        bpreds = torch.cat([bx52, bx26, bx13], dim=1)
-        results = non_max_supression(
-            bpreds, self.conf_threshold, self.size_limits, self.iou_threshold
-        )
+        with torch.no_grad():
+            _, results, _, paths, raw_images = self._common_step(batch, batch_idx)
         return paths, results, raw_images
 
     def configure_optimizers(self):
