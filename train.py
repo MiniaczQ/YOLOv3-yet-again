@@ -33,7 +33,7 @@ def main():
                 ),
                 filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_mean:.2f}",
                 save_top_k=3,
-                mode="min",
+                mode="max",
             ),
             ModelCheckpoint(
                 dirpath=datetime.now().strftime(
@@ -43,6 +43,7 @@ def main():
                 save_top_k=1,
             ),
         ],
+        num_sanity_val_steps=0,
         # overfit_batches=1,
         benchmark=False,
     )
@@ -58,8 +59,8 @@ def main():
     # bsaabbs = trainer.predict(model, dl)
     # show_results(ds, batch_size, bsaabbs)
     # summary(model.model, (1, 3, 416, 416))
-    dm = Datamodule(0)
-    dm.batch_size = 32
+    dm = Datamodule(12)
+    dm.batch_size = 40
     dm.prepare_data()
     dm.setup()
     # dl = dm.train_dataloader(0)
