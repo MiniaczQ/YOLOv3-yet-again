@@ -1,16 +1,24 @@
 import lightning as pl
+
 import numpy as np
+
 import torch
+
 from torch.utils.data import random_split, DataLoader, ConcatDataset, Dataset
+
 from torchvision import transforms
+
 from torch import Generator
+
 from pklot_dataset import PkLotDataset
 
+
 from processing import PadToSquare, ResizeKeepRatio, NormalizeBbox
+
 import pklot_preprocessor
 
 
-class Datamodule(pl.LightningDataModule):
+class DataModule(pl.LightningDataModule):
     def __init__(
         self,
         num_workers=2,
@@ -36,11 +44,11 @@ class Datamodule(pl.LightningDataModule):
                 PadToSquare(114),
             ]
         )
+
         self.ann_transform = transforms.Compose([NormalizeBbox(self.unscaled_size)])
 
     def prepare_data(self):
-        return  # TODO: introduce a checksum or sth like that for conditional preprocessing (if needed)
-        pklot_preprocessor.preprocess("data/pklot")
+        pklot_preprocessor.preprocess("data/PKLot", True, True)
 
     def setup(
         self,
@@ -49,19 +57,21 @@ class Datamodule(pl.LightningDataModule):
         pklot_dataset = PkLotDataset(
             "data/pklot", self.img_transform, self.ann_transform
         )
-        dataset = ConcatDataset([pklot_dataset])
 
+        dataset = ConcatDataset([pklot_dataset])
+        # Split 8:1:1
         dataset, self.test_dataset = random_split(
             dataset, [9 / 10, 1 / 10], Generator().manual_seed(self.test_seed)
         )
-
         self.train_dataset, self.val_dataset = random_split(
             dataset, [8 / 9, 1 / 9], Generator().manual_seed(self.train_val_seed)
         )
+
         if self.size_limit > 0:
 
             def _split_size_limit(dataset: Dataset):
                 sample_count = self.size_limit * self.batch_size
+
                 return random_split(
                     dataset,
                     [
@@ -75,9 +85,11 @@ class Datamodule(pl.LightningDataModule):
             self.train_dataset = _split_size_limit(self.train_dataset)
             self.val_dataset = _split_size_limit(self.val_dataset)
 
+    # Custom collate function for combining multiple images & labels into a batch
     @staticmethod
     def _collate_fn(batch):
         image_batch = torch.stack([elem[0] for elem in batch], 0)
+
         annotation_batch = torch.cat(
             [
                 torch.cat(
@@ -91,6 +103,7 @@ class Datamodule(pl.LightningDataModule):
             ],
             0,
         )
+
         path_batch = [elem[2] for elem in batch]
         raw_image_batch = [elem[3] for elem in batch]
         return (image_batch, annotation_batch, path_batch, raw_image_batch)

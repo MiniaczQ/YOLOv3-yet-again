@@ -1,3 +1,4 @@
+# Roughly based on https://www.programcreek.com/python/?CodeExample=load+darknet+weights
 from torch import nn, no_grad, from_numpy
 import numpy as np
 
@@ -5,6 +6,8 @@ import numpy as np
 from modules import Darknet53Conv, YOLOv3
 
 
+# Fill model with weights stored in a file
+# 20 bytes of header then weights
 def load_model_from_file(model, file):
     with open(file, "rb") as f:
         np.fromfile(f, dtype=np.int32, count=5)
@@ -12,7 +15,7 @@ def load_model_from_file(model, file):
     load_model(model, weights)
 
 
-# Based on https://www.programcreek.com/python/?CodeExample=load+darknet+weights
+# Loads a model from numpy array
 def load_model(model, weights):
     with no_grad():
         total = load_module(model, weights)
@@ -20,6 +23,7 @@ def load_model(model, weights):
         raise Exception(f"Weights mismatch, required {total}, provided {len(weights)}")
 
 
+# Loads weights of a single module (and its' submodules0)
 def load_module(module: nn.Module, weights):
     total = 0
     match module:
@@ -37,6 +41,7 @@ def load_module(module: nn.Module, weights):
     return total
 
 
+# Loads a single parameter
 def load_param(param, weights):
     size = param.numel()
     data = weights[:size]
@@ -44,6 +49,7 @@ def load_param(param, weights):
     return size
 
 
+# Loads a convolution layer parameters in correct order
 def load_darknet53_conv(module: Darknet53Conv, weights):
     total = 0
     total += load_module(module.bn, weights[total:])
@@ -51,6 +57,7 @@ def load_darknet53_conv(module: Darknet53Conv, weights):
     return total
 
 
+# Loads a conv2d layer parameters in correct order
 def load_conv2d(module: nn.Conv2d, weights):
     total = 0
     if module.bias is not None:  # Required when loading Darknet53 classifier
@@ -59,6 +66,7 @@ def load_conv2d(module: nn.Conv2d, weights):
     return total
 
 
+# Loads a batchnorm2d layer parameters in correct order
 def load_batch_norm2d(module: nn.BatchNorm2d, weights):
     total = 0
     total += load_param(module.bias, weights[total:])
@@ -68,6 +76,7 @@ def load_batch_norm2d(module: nn.BatchNorm2d, weights):
     return total
 
 
+# Loads YOLOv3 modes in the correct order
 def load_yolov3(module: YOLOv3, weights):
     total = 0
     total += load_module(module.backbone, weights[total:])

@@ -8,6 +8,7 @@ from torchvision import transforms
 from processing import ResizeKeepRatio, PadToSquare
 
 
+# Simple dataset for testing
 class SimpleDataset(Dataset):
     def __init__(self, root):
         self.root = Path(root)

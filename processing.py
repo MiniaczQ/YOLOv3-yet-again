@@ -203,11 +203,11 @@ def non_max_supression(bpreds: Tensor, conf_threshold, size_limits, iou_threshol
         idxs = nms(boxes, scores, iou_threshold)
         # Box merging using weighted mean
         if 1 < num_boxes:
-            # IoU for each pair of nms selected boxes and original boxes; len(idxs) x len(boxes)
+            # For each nms selected box, find all other boxes that are overlapping
             iou = box_iou(boxes[idxs], boxes) > iou_threshold
-            # Weight of each intersection
+            # Assign weight to each box
             weights = iou * scores.view(1, -1)
-            # Merging
+            # Perform a weighted mean
             preds[idxs, :4] = torch.mm(weights, preds[:, :4]).float() / weights.sum(
                 1, keepdim=True
             )

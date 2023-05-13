@@ -4,7 +4,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 import torch
 
-
+# Load PKLot with labels
 class PkLotDataset(Dataset):
     def __init__(self, root, img_transform=None, ann_transform=None):
         self.root = Path(root)

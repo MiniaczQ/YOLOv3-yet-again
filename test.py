@@ -1,15 +1,16 @@
 from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
-import torch
-from datamodule import Datamodule
+from datamodule import DataModule
 from yolov3 import YoloV3Module
-from lightning.pytorch.callbacks import ModelCheckpoint
 from datetime import datetime
+import torch
 
 
 def main():
     torch.manual_seed(123)
+
     torch.set_float32_matmul_precision("medium")
+
     trainer = Trainer(
         auto_scale_batch_size=False,
         accelerator="gpu",
@@ -19,15 +20,18 @@ def main():
         num_sanity_val_steps=0,
         benchmark=False,
     )
+
     model = YoloV3Module(2)
-    # model.load_from_checkpoint(
-    #     "model_checkpoints/2023-05-13_04-55-47/last/model-epoch=04-val_loss_mean=0.27-val_map_50_95=0.00.ckpt"
-    # )
-    dm = Datamodule(0, size_limit=1)  # TODO: use number of cores
-    dm.batch_size = 4
-    dm.prepare_data()
+    model = model.load_from_checkpoint("model_checkpoints/prepared.ckpt")
+
+    dm = DataModule(12)
+    dm.batch_size = 16
+    # dm.prepare_data()
     dm.setup()
-    trainer.test(model=model, datamodule=dm)
+
+    metrics = trainer.test(model=model, datamodule=dm)
+    print(f"mAP@0.5:0.95: {metrics['val_map_50_95']}")
+    print(f"mAP@0.5: {metrics['val_map_50']}")
 
 
 if __name__ == "__main__":

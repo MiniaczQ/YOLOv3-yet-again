@@ -3,6 +3,7 @@ from torch import nn, cat
 import torch.nn.functional as F
 
 
+# Simplified convolution module based on the one used in YOLO and Darknet
 class Darknet53Conv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
         super().__init__()
@@ -24,6 +25,7 @@ class Darknet53Conv(nn.Module):
         return x
 
 
+# Simplified residual module based on the one used in YOLO and Darknet
 class Darknet53Residual(nn.Module):
     def __init__(self, io_channels, mid_channels):
         super().__init__()
@@ -38,6 +40,7 @@ class Darknet53Residual(nn.Module):
         return x
 
 
+# N chained residual modules
 class Darknet53Residuals(nn.Module):
     def __init__(self, io_channels, mid_channels, n_times):
         super().__init__()
@@ -50,6 +53,7 @@ class Darknet53Residuals(nn.Module):
         return x
 
 
+# Darknet53 backbone module
 class Darknet53(nn.Module):
     def __init__(self):
         super().__init__()
@@ -83,6 +87,7 @@ class Darknet53(nn.Module):
         return x52, x26, x13
 
 
+# Feature pyramid convolution layer
 class FeaturePyramidConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -102,6 +107,7 @@ class FeaturePyramidConv(nn.Module):
         return x
 
 
+# YOLOv3 head module
 class YOLOv3Head(nn.Module):
     def __init__(self, in_channels: int, num_classes: int):
         super().__init__()
@@ -115,6 +121,7 @@ class YOLOv3Head(nn.Module):
         return x
 
 
+# Feature pyramid upsampling module
 class FeaturePyramidUpsample(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
@@ -126,6 +133,7 @@ class FeaturePyramidUpsample(nn.Module):
         return x
 
 
+# Feature pyramid network module
 class FeaturePyramid(nn.Module):
     def __init__(self):
         super().__init__()  # 13x13
@@ -151,6 +159,7 @@ class FeaturePyramid(nn.Module):
         return x52, x26, x13
 
 
+# YOLOv3 module
 class YOLOv3(nn.Module):
     def __init__(self, num_classes: int):
         super().__init__()

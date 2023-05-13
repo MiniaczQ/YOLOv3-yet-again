@@ -7,8 +7,13 @@ import numpy as np
 from os import remove
 
 
-def preprocess(root, silent=True):
-    # TODO: clean all existing .data
+# Preprocess PKLot labels
+# Skip invalid box definitions, not all visible parking spaces are labeled anyways
+# Labels are saved as .data files with tensor([[occupied, min_x, min_y, max_x, max_y]]) format
+def preprocess(root, silent=True, remove_old=False):
+    if remove_old:
+        for file in root.rglob("*.data"):
+            remove(file)
     printed = True
     root = Path(root)
     images = list(root.rglob("*.jpg"))
