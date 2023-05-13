@@ -12,18 +12,36 @@ def main():
     torch.set_float32_matmul_precision("medium")
     trainer = Trainer(
         auto_scale_batch_size=False,
-        accelerator="cpu",
+        accelerator="gpu",
         devices=1,
         logger=True,
         max_epochs=500,
         callbacks=[
             ModelCheckpoint(
                 monitor="val_loss_mean",
-                dirpath=datetime.now().strftime("model_checkpoints/%Y-%m-%d_%H-%M-%S/"),
-                filename="model-{epoch:02d}-{val_loss_mean:.2f}",
+                dirpath=datetime.now().strftime(
+                    "model_checkpoints/%Y-%m-%d_%H-%M-%S/loss"
+                ),
+                filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_mean:.2f}",
                 save_top_k=3,
                 mode="min",
-            )
+            ),
+            ModelCheckpoint(
+                monitor="val_map_mean",
+                dirpath=datetime.now().strftime(
+                    "model_checkpoints/%Y-%m-%d_%H-%M-%S/map"
+                ),
+                filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_mean:.2f}",
+                save_top_k=3,
+                mode="min",
+            ),
+            ModelCheckpoint(
+                dirpath=datetime.now().strftime(
+                    "model_checkpoints/%Y-%m-%d_%H-%M-%S/last"
+                ),
+                filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_mean:.2f}",
+                save_top_k=1,
+            ),
         ],
         # overfit_batches=1,
         benchmark=False,
@@ -41,7 +59,7 @@ def main():
     # show_results(ds, batch_size, bsaabbs)
     # summary(model.model, (1, 3, 416, 416))
     dm = Datamodule(0)
-    dm.batch_size = 8
+    dm.batch_size = 32
     dm.prepare_data()
     dm.setup()
     # dl = dm.train_dataloader(0)

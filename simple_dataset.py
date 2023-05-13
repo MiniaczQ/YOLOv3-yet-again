@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import Dataset
 from PIL import Image
 from pathlib import Path
@@ -21,10 +22,10 @@ class SimpleDataset(Dataset):
         )
 
     def __getitem__(self, i):
+        img_path = self.images[i]
         raw_img = Image.open(img_path).convert("RGB")
         img = self.transform(raw_img)
-        annotations = None
-        img_path = self.images[i]
+        annotations = torch.tensor([])
         return img, annotations, str(img_path.name), raw_img
 
     def __len__(self):
