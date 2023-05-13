@@ -22,16 +22,16 @@ def main():
                 dirpath=datetime.now().strftime(
                     "model_checkpoints/%Y-%m-%d_%H-%M-%S/loss"
                 ),
-                filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_mean:.2f}",
+                filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_50_95:.2f}",
                 save_top_k=3,
                 mode="min",
             ),
             ModelCheckpoint(
-                monitor="val_map_mean",
+                monitor="val_map_50_95",
                 dirpath=datetime.now().strftime(
                     "model_checkpoints/%Y-%m-%d_%H-%M-%S/map"
                 ),
-                filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_mean:.2f}",
+                filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_50_95:.2f}",
                 save_top_k=3,
                 mode="max",
             ),
@@ -39,7 +39,7 @@ def main():
                 dirpath=datetime.now().strftime(
                     "model_checkpoints/%Y-%m-%d_%H-%M-%S/last"
                 ),
-                filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_mean:.2f}",
+                filename="model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_50_95:.2f}",
                 save_top_k=1,
             ),
         ],
@@ -60,7 +60,7 @@ def main():
     # show_results(ds, batch_size, bsaabbs)
     # summary(model.model, (1, 3, 416, 416))
     dm = Datamodule(12)
-    dm.batch_size = 40
+    dm.batch_size = 16
     dm.prepare_data()
     dm.setup()
     # dl = dm.train_dataloader(0)
