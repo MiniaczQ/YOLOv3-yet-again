@@ -1,3 +1,4 @@
+from multiprocessing import cpu_count
 from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
 from datamodule import DataModule
@@ -6,32 +7,32 @@ from datetime import datetime
 import torch
 
 
-def main():
-    torch.manual_seed(123)
+debug = False
+checkpoint_filename = "model_checkpoints/prepared.ckpt"
 
+
+def main():
+    if debug:
+        torch.manual_seed(0)
     torch.set_float32_matmul_precision("medium")
 
     trainer = Trainer(
-        auto_scale_batch_size=False,
-        accelerator="gpu",
+        accelerator="auto",
         devices=1,
         logger=True,
-        max_epochs=500,
-        num_sanity_val_steps=0,
         benchmark=False,
+        limit_test_batches=16,
     )
 
-    model = YoloV3Module(2)
-    model = model.load_from_checkpoint("model_checkpoints/prepared.ckpt")
+    model = YoloV3Module.load_from_checkpoint(checkpoint_filename)
 
-    dm = DataModule(12)
-    dm.batch_size = 16
-    # dm.prepare_data()
-    dm.setup()
-
-    metrics = trainer.test(model=model, datamodule=dm)
-    print(f"mAP@0.5:0.95: {metrics['val_map_50_95']}")
-    print(f"mAP@0.5: {metrics['val_map_50']}")
+    metrics = trainer.test(
+        model=model,
+        datamodule=DataModule(cpu_count() if not debug else 0),
+    )
+    print(f"mAP@0.5:0.95: {metrics[0]['test_map_50_95']}")
+    print(f"mAP@0.5: {metrics[0]['test_map_50']}")
+    print(f"mAP@0.75: {metrics[0]['test_map_75']}")
 
 
 if __name__ == "__main__":

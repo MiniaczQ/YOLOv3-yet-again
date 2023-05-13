@@ -22,6 +22,7 @@ class DataModule(pl.LightningDataModule):
     def __init__(
         self,
         num_workers=2,
+        *,
         size_limit=0,
         train_val_seed=2136,
         test_seed=2136,
@@ -46,10 +47,6 @@ class DataModule(pl.LightningDataModule):
         )
 
         self.ann_transform = transforms.Compose([NormalizeBbox(self.unscaled_size)])
-
-    def prepare_data(self):
-        pass
-        # pklot_preprocessor.preprocess("data/PKLot", True, True)
 
     def setup(
         self,
@@ -138,3 +135,7 @@ class DataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=self._collate_fn,
         )
+
+    # TODO: prepare a separate set for prediction
+    def predict_dataloader(self):
+        return self.test_dataloader()

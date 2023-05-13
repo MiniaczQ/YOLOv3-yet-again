@@ -1,3 +1,4 @@
+from itertools import chain
 from model_loader import load_model_from_file
 from modules import YOLOv3
 import lightning as pl
@@ -11,7 +12,6 @@ from processing import (
     non_max_supression,
     process_anchor,
     normalize_model_output,
-    process_output_without_sigmoid,
 )
 
 
@@ -220,29 +220,39 @@ class YoloV3Module(pl.LightningModule):
     def validation_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
             loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
-            if batch_idx == 0:
-                all_maps = calculate_map(results, annotations)
-                self.log("val_map_50", all_maps["map_50"], on_epoch=True)
-                self.log("val_map_75", all_maps["map_75"], on_epoch=True)
-                self.log("val_map_50_95", all_maps["map"], on_epoch=True)
-            return {"val_loss": loss}
+        return {"val_loss": loss, "results": results, "annotations": annotations}
 
     def validation_epoch_end(self, outs):
         avg_loss = torch.stack([out["val_loss"] for out in outs]).mean()
+        batch_size = len(outs)
+        for i, out in enumerate(outs):
+            out["annotations"][1] += i * batch_size
+        all_maps = calculate_map(
+            list(chain.from_iterable(out["results"] for out in outs)),
+            torch.cat([out["annotations"] for out in outs]),
+        )
+        self.log("val_map_50", all_maps["map_50"])
+        self.log("val_map_75", all_maps["map_75"])
+        self.log("val_map_50_95", all_maps["map"])
         self.log("val_loss_mean", avg_loss)
 
     def test_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
             loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
-            if batch_idx == 0:
-                all_maps = calculate_map(results, annotations)
-                self.log("test_map_50", all_maps["map_50"], on_epoch=True)
-                self.log("test_map_75", all_maps["map_75"], on_epoch=True)
-                self.log("test_map_50_95", all_maps["map"], on_epoch=True)
-            return {"test_loss": loss}
+        return {"test_loss": loss, "results": results, "annotations": annotations}
 
     def test_epoch_end(self, outs):
         avg_loss = torch.stack([out["test_loss"] for out in outs]).mean()
+        batch_size = len(outs)
+        for i, out in enumerate(outs):
+            out["annotations"][1] += i * batch_size
+        all_maps = calculate_map(
+            list(chain.from_iterable(out["results"] for out in outs)),
+            torch.cat([out["annotations"] for out in outs]),
+        )
+        self.log("test_map_50", all_maps["map_50"])
+        self.log("test_map_75", all_maps["map_75"])
+        self.log("test_map_50_95", all_maps["map"])
         self.log("test_loss_mean", avg_loss)
 
     def predict_step(self, batch, batch_idx):

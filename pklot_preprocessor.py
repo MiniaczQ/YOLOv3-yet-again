@@ -1,9 +1,6 @@
-from torch.utils.data import Dataset
-from PIL import Image
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import torch
-import numpy as np
 from os import remove
 
 

@@ -110,7 +110,7 @@ def output_results(
         for batch in results:
             for path, predictions, raw_image in zip(*batch):
                 if flatten_output:
-                    path = Path(path).parts.join("__")
+                    path = "__".join(Path(path).parts)
                 # Calculate padding of the image so we can reverse it
                 ow, oh = raw_image.width, raw_image.height
                 om = max(ow, oh)
