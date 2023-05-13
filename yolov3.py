@@ -182,7 +182,7 @@ class YoloV3Module(pl.LightningModule):
             )
             loss[head_name] = self._compute_loss(
                 head_outputs,
-                processed_annotations[head_name],
+                processed_annotations,
                 mask_obj,
                 mask_noobj,
             )
