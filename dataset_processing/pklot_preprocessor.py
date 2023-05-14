@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 from os import remove
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -29,7 +30,9 @@ def preprocess(root, silent=True, remove_old=False):
                 try:
                     occupied = int(space.attrib["occupied"])
                 except:
-                    print(f"Skipping bbox without occupied attribute for image {image}")
+                    print(
+                        f"\tSkipping bbox without occupied attribute for image {image}"
+                    )
                     continue
                 any_point_found = False
                 min_x, min_y = 2**31 - 1, 2**31 - 1
@@ -65,9 +68,10 @@ def preprocess(root, silent=True, remove_old=False):
         print(f"Errors: {errors}")
 
 
-def main():
-    preprocess("data/pklot", False, True)
-
-
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument("root", type=str, nargs="?", default="./data/PKLot")
+    parser.add_argument("-s", "--silent", action="store_true")
+    parser.add_argument("-r", "--removeold", action="store_true")
+    args = parser.parse_args()
+    preprocess(args.root, args.silent, args.removeold)
