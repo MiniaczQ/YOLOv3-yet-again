@@ -9,9 +9,7 @@ from multiprocessing import cpu_count
 import metric_names
 
 debug = False
-model_checkpoint_dir = datetime.now().strftime(
-    "model_checkpoints/%Y-%m-%d_%H-%M-%S/loss"
-)
+model_checkpoint_dir = datetime.now().strftime("model_checkpoints/%Y-%m-%d_%H-%M-%S")
 model_checkpoint_filename = (
     "model-{epoch:02d}-{val_"
     + metric_names.avg_loss
@@ -39,14 +37,14 @@ def main():
         callbacks=[
             ModelCheckpoint(
                 monitor="val_" + metric_names.avg_loss,
-                dirpath=model_checkpoint_dir,
+                dirpath=model_checkpoint_dir + "/loss",
                 filename=model_checkpoint_filename,
                 save_top_k=3,
                 mode="min",
             ),
             ModelCheckpoint(
                 monitor="val_" + metric_names.map_50_95,
-                dirpath=model_checkpoint_dir,
+                dirpath=model_checkpoint_dir + "/map",
                 filename=model_checkpoint_filename,
                 save_top_k=3,
                 mode="max",
