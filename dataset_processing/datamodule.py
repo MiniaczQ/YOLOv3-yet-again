@@ -12,6 +12,7 @@ from .processing import PadToSquare, ResizeKeepRatio, NormalizeBbox
 class DataModule(pl.LightningDataModule):
     def __init__(
         self,
+        root_path,
         num_workers=2,
         *,
         size_limit=0,
@@ -20,6 +21,7 @@ class DataModule(pl.LightningDataModule):
         size_limit_seed=2136,
     ):
         super().__init__()
+        self.root_path = root_path
         self.num_workers = num_workers
         self.size_limit = size_limit
         self.train_val_seed = train_val_seed
@@ -44,7 +46,7 @@ class DataModule(pl.LightningDataModule):
         stage=None,
     ):
         pklot_dataset = PkLotDataset(
-            "data/pklot", self.img_transform, self.ann_transform
+            self.root_path, self.img_transform, self.ann_transform
         )
 
         dataset = ConcatDataset([pklot_dataset])
