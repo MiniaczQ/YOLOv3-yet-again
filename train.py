@@ -7,9 +7,9 @@ from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
 
-from datamodule import DataModule
-import metric_names
-from yolov3 import YoloV3Module
+from dataset_processing.datamodule import DataModule
+import model.metric_names as metric_names
+from model.yolov3 import YoloV3Module
 
 
 MODEL_CHECKPOINT_DIR = datetime.now().strftime("model_checkpoints/%Y-%m-%d_%H-%M-%S")

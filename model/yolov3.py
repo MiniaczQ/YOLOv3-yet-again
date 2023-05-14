@@ -8,10 +8,10 @@ import torch.nn.functional as F
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from torchvision.ops import box_iou
 
-import metric_names
-from model_loader import load_model_from_file
-from modules import YOLOv3
-from processing import (
+import model.metric_names as metric_names
+from .model_loader import load_model_from_file
+from .modules import YOLOv3
+from .processing import (
     non_max_supression,
     process_anchor,
     normalize_model_output,
@@ -21,8 +21,8 @@ from processing import (
 
 # YOLOv3 module with pre- and postprocessing
 class YoloV3Module(pl.LightningModule):
-    FULL_YOLO_WEIGHTS_PATH = "pretrained_weights/yolov3.weights"
-    DARKNET53_74_WEIGHTS_PATH = "pretrained_weights/darknet53.conv.74"
+    FULL_YOLO_WEIGHTS_PATH = "./pretrained_weights/yolov3.weights"
+    DARKNET53_74_WEIGHTS_PATH = "./pretrained_weights/darknet53.conv.74"
 
     def __init__(
         self,

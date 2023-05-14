@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from processing import ResizeKeepRatio, PadToSquare
+from .processing import ResizeKeepRatio, PadToSquare
 
 
 # Simple dataset for testing

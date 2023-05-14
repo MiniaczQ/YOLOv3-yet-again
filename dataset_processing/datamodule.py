@@ -5,8 +5,8 @@ from torch import Generator
 from torch.utils.data import random_split, DataLoader, ConcatDataset, Dataset
 from torchvision import transforms
 
-from pklot_dataset import PkLotDataset
-from processing import PadToSquare, ResizeKeepRatio, NormalizeBbox
+from .pklot_dataset import PkLotDataset
+from .processing import PadToSquare, ResizeKeepRatio, NormalizeBbox
 
 
 class DataModule(pl.LightningDataModule):

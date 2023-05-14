@@ -5,8 +5,8 @@ from typing import IO, Union
 from lightning import Trainer
 import torch
 
-from datamodule import DataModule
-from yolov3 import YoloV3Module
+from dataset_processing.datamodule import DataModule
+from model.yolov3 import YoloV3Module
 
 
 def main(loaded_checkpoint_path: Union[str, IO], debug=False):
