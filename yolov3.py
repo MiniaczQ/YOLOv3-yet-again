@@ -1,4 +1,5 @@
 from itertools import chain
+from typing import Optional
 from model_loader import load_model_from_file
 from modules import YOLOv3
 import lightning as pl
@@ -8,11 +9,12 @@ from torch import Tensor
 import torch.nn.functional as F
 from torchvision.ops import box_iou
 from processing import (
-    calculate_map,
     non_max_supression,
     process_anchor,
     normalize_model_output,
+    update_map,
 )
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import metric_names
 
 
@@ -53,7 +55,8 @@ class YoloV3Module(pl.LightningModule):
         for p in self.model.backbone.parameters():
             p.requires_grad = False
 
-        self.epoch_train_loss_sum = 0
+        self.validation_map: Optional[MeanAveragePrecision] = None
+        self.test_map: Optional[MeanAveragePrecision] = None
 
     def forward(self, x):
         return self.model(x)
@@ -152,8 +155,6 @@ class YoloV3Module(pl.LightningModule):
         return loss_x + loss_y + loss_w + loss_h + loss_obj + loss_cls
 
     def _common_step(self, batch: list, batch_idx: int):
-        if batch_idx == 0:
-            self.epoch_train_loss_sum = 0
         # input: transformed image
         # annotations: annotation_batch_size * (image_id, class_id, x [0..1], y [0..1], w [0..1], h [0..1])
         #     where (x, y): center, (w, h): size, [0..1] wrt width or height
@@ -218,49 +219,39 @@ class YoloV3Module(pl.LightningModule):
         avg_loss = torch.stack([out[metric_names.loss] for out in outs]).mean()
         self.log("train_" + metric_names.avg_loss, avg_loss)
 
+    def on_validation_epoch_start(self):
+        self.validation_map = MeanAveragePrecision()
+
     def validation_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
             loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
-        return {
-            "val_" + metric_names.loss: loss,
-            "results": results,
-            "annotations": annotations,
-        }
+        update_map(self.validation_map, results, annotations)
+        return {"val_" + metric_names.loss: loss}
 
     def validation_epoch_end(self, outs):
         prefix = "val_"
         avg_loss = torch.stack([out[prefix + metric_names.loss] for out in outs]).mean()
-        batch_size = len(outs)
-        for i, out in enumerate(outs):
-            out["annotations"][1] += i * batch_size
-        all_maps = calculate_map(
-            list(chain.from_iterable(out["results"] for out in outs)),
-            torch.cat([out["annotations"] for out in outs]),
-        )
+        all_maps = self.validation_map.compute()
+        self.validation_map = None
         self.log(prefix + metric_names.map_50, all_maps["map_50"])
         self.log(prefix + metric_names.map_75, all_maps["map_75"])
         self.log(prefix + metric_names.map_50_95, all_maps["map"])
         self.log(prefix + metric_names.avg_loss, avg_loss)
 
+    def on_test_epoch_start(self):
+        self.test_map = MeanAveragePrecision()
+
     def test_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
             loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
-        return {
-            "test_" + metric_names.loss: loss,
-            "results": results,
-            "annotations": annotations,
-        }
+        update_map(self.test_map, results, annotations)
+        return {"test_" + metric_names.loss: loss}
 
     def test_epoch_end(self, outs):
         prefix = "test_"
         avg_loss = torch.stack([out[prefix + metric_names.loss] for out in outs]).mean()
-        batch_size = len(outs)
-        for i, out in enumerate(outs):
-            out["annotations"][1] += i * batch_size
-        all_maps = calculate_map(
-            list(chain.from_iterable(out["results"] for out in outs)),
-            torch.cat([out["annotations"] for out in outs]),
-        )
+        all_maps = self.test_map.compute()
+        self.test_map = None
         self.log(prefix + metric_names.map_50, all_maps["map_50"])
         self.log(prefix + metric_names.map_75, all_maps["map_75"])
         self.log(prefix + metric_names.map_50_95, all_maps["map"])
