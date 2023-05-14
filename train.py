@@ -32,6 +32,8 @@ def main():
         devices=1,
         logger=True,
         max_epochs=500 if not debug else 1,
+        limit_train_batches=16 * 9 if not debug else 1,
+        limit_val_batches=16 if not debug else 1,
         num_sanity_val_steps=0,
         benchmark=False,
         callbacks=[
@@ -54,7 +56,9 @@ def main():
                 filename="last",
                 save_top_k=1,
             ),
-        ],
+        ]
+        if not debug
+        else None,
     )
 
     model = YoloV3Module(2)
