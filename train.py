@@ -1,3 +1,4 @@
+from typing import IO, Optional, Union
 from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
@@ -6,11 +7,12 @@ from yolov3 import YoloV3Module
 from lightning.pytorch.callbacks import ModelCheckpoint
 from datetime import datetime
 from multiprocessing import cpu_count
+from argparse import ArgumentParser, FileType
 import metric_names
 
-debug = False
-model_checkpoint_dir = datetime.now().strftime("model_checkpoints/%Y-%m-%d_%H-%M-%S")
-model_checkpoint_filename = (
+
+MODEL_CHECKPOINT_DIR = datetime.now().strftime("model_checkpoints/%Y-%m-%d_%H-%M-%S")
+MODEL_CHECKPOINT_FILENAME = (
     "model-{epoch:02d}-{val_"
     + metric_names.avg_loss
     + ":.2f}-{val_"
@@ -19,7 +21,7 @@ model_checkpoint_filename = (
 )
 
 
-def main():
+def main(loaded_checkpoint_path: Optional[Union[str, IO]] = None, debug=False):
     if debug:
         torch.manual_seed(0)
     torch.set_float32_matmul_precision("medium")
@@ -37,20 +39,20 @@ def main():
         callbacks=[
             ModelCheckpoint(
                 monitor="val_" + metric_names.avg_loss,
-                dirpath=model_checkpoint_dir + "/loss",
-                filename=model_checkpoint_filename,
+                dirpath=MODEL_CHECKPOINT_DIR + "/loss",
+                filename=MODEL_CHECKPOINT_FILENAME,
                 save_top_k=3,
                 mode="min",
             ),
             ModelCheckpoint(
                 monitor="val_" + metric_names.map_50_95,
-                dirpath=model_checkpoint_dir + "/map",
-                filename=model_checkpoint_filename,
+                dirpath=MODEL_CHECKPOINT_DIR + "/map",
+                filename=MODEL_CHECKPOINT_FILENAME,
                 save_top_k=3,
                 mode="max",
             ),
             ModelCheckpoint(
-                dirpath="model_checkpoints/last",
+                dirpath=MODEL_CHECKPOINT_DIR + "/last",
                 filename="last",
                 save_top_k=1,
             ),
@@ -59,7 +61,11 @@ def main():
         else None,
     )
 
-    model = YoloV3Module(2)
+    model = (
+        YoloV3Module(2)
+        if loaded_checkpoint_path is None
+        else YoloV3Module.load_from_checkpoint(loaded_checkpoint_path)
+    )
 
     trainer.fit(
         model=model,
@@ -68,4 +74,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument("loaded_checkpoint", nargs="?", type=FileType("rb"))
+    parser.add_argument("-d", "--debug", action="store_true")
+    args = parser.parse_args()
+    main(args.loaded_checkpoint, args.debug)
