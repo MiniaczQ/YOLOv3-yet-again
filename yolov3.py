@@ -13,6 +13,7 @@ from processing import (
     process_anchor,
     normalize_model_output,
 )
+import metric_names
 
 
 # YOLOv3 module with pre- and postprocessing
@@ -211,19 +212,24 @@ class YoloV3Module(pl.LightningModule):
         loss, _, _, _, _ = self._common_step(batch, batch_idx)
         # with open("./total_loss_grad_graph.txt", "w") as f:
         #     f.write(torchviz.make_dot(total_loss).__str__())
-        return {"loss": loss}
+        return {metric_names.loss: loss}
 
     def training_epoch_end(self, outs):
-        avg_loss = torch.stack([out["loss"] for out in outs]).mean()
-        self.log("train_loss_mean", avg_loss)
+        avg_loss = torch.stack([out[metric_names.loss] for out in outs]).mean()
+        self.log("train_" + metric_names.avg_loss, avg_loss)
 
     def validation_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
             loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
-        return {"val_loss": loss, "results": results, "annotations": annotations}
+        return {
+            "val_" + metric_names.loss: loss,
+            "results": results,
+            "annotations": annotations,
+        }
 
     def validation_epoch_end(self, outs):
-        avg_loss = torch.stack([out["val_loss"] for out in outs]).mean()
+        prefix = "val_"
+        avg_loss = torch.stack([out[prefix + metric_names.loss] for out in outs]).mean()
         batch_size = len(outs)
         for i, out in enumerate(outs):
             out["annotations"][1] += i * batch_size
@@ -231,18 +237,23 @@ class YoloV3Module(pl.LightningModule):
             list(chain.from_iterable(out["results"] for out in outs)),
             torch.cat([out["annotations"] for out in outs]),
         )
-        self.log("val_map_50", all_maps["map_50"])
-        self.log("val_map_75", all_maps["map_75"])
-        self.log("val_map_50_95", all_maps["map"])
-        self.log("val_loss_mean", avg_loss)
+        self.log(prefix + metric_names.map_50, all_maps["map_50"])
+        self.log(prefix + metric_names.map_75, all_maps["map_75"])
+        self.log(prefix + metric_names.map_50_95, all_maps["map"])
+        self.log(prefix + metric_names.avg_loss, avg_loss)
 
     def test_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
             loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
-        return {"test_loss": loss, "results": results, "annotations": annotations}
+        return {
+            "test_" + metric_names.loss: loss,
+            "results": results,
+            "annotations": annotations,
+        }
 
     def test_epoch_end(self, outs):
-        avg_loss = torch.stack([out["test_loss"] for out in outs]).mean()
+        prefix = "test_"
+        avg_loss = torch.stack([out[prefix + metric_names.loss] for out in outs]).mean()
         batch_size = len(outs)
         for i, out in enumerate(outs):
             out["annotations"][1] += i * batch_size
@@ -250,10 +261,10 @@ class YoloV3Module(pl.LightningModule):
             list(chain.from_iterable(out["results"] for out in outs)),
             torch.cat([out["annotations"] for out in outs]),
         )
-        self.log("test_map_50", all_maps["map_50"])
-        self.log("test_map_75", all_maps["map_75"])
-        self.log("test_map_50_95", all_maps["map"])
-        self.log("test_loss_mean", avg_loss)
+        self.log(prefix + metric_names.map_50, all_maps["map_50"])
+        self.log(prefix + metric_names.map_75, all_maps["map_75"])
+        self.log(prefix + metric_names.map_50_95, all_maps["map"])
+        self.log(prefix + metric_names.avg_loss, avg_loss)
 
     def predict_step(self, batch, batch_idx):
         with torch.no_grad():

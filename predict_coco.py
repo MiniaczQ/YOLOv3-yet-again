@@ -17,14 +17,18 @@ def main():
         torch.manual_seed(0)
     torch.set_float32_matmul_precision("medium")
 
-    trainer = Trainer(accelerator="auto", devices=1, logger=False)
+    trainer = Trainer(
+        accelerator="auto" if not debug else "cpu", devices=1, logger=False
+    )
 
     model = YoloV3Module(80)  # Auto-load COCOv3
     model.conf_threshold = 0.3
     model.iou_threshold = 0.5
 
     ds = SimpleDataset("data/COCO")
-    dl = DataLoader(ds, 32, False, collate_fn=DataModule._collate_fn)
+    dl = DataLoader(
+        ds, 32 if not debug else 1, False, collate_fn=DataModule._collate_fn
+    )
 
     results = trainer.predict(model, dl)
 

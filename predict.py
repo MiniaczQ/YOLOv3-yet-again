@@ -18,10 +18,10 @@ def main():
     torch.set_float32_matmul_precision("medium")
 
     trainer = Trainer(
-        accelerator="auto",
+        accelerator="auto" if not debug else "cpu",
         devices=1,
         logger=False,
-        limit_predict_batches=32,
+        limit_predict_batches=32 if not debug else 1,
     )
 
     model = YoloV3Module.load_from_checkpoint(checkpoint_filename)

@@ -6,12 +6,19 @@ from yolov3 import YoloV3Module
 from lightning.pytorch.callbacks import ModelCheckpoint
 from datetime import datetime
 from multiprocessing import cpu_count
+import metric_names
 
 debug = False
 model_checkpoint_dir = datetime.now().strftime(
     "model_checkpoints/%Y-%m-%d_%H-%M-%S/loss"
 )
-model_checkpoint_filename = "model-{epoch:02d}-{val_loss_mean:.2f}-{val_map_50_95:.2f}"
+model_checkpoint_filename = (
+    "model-{epoch:02d}-{val_"
+    + metric_names.avg_loss
+    + ":.2f}-{val_"
+    + metric_names.map_50_95
+    + ":.2f}"
+)
 
 
 def main():
@@ -21,22 +28,22 @@ def main():
 
     trainer = Trainer(
         auto_scale_batch_size=True,
-        accelerator="auto",
+        accelerator="auto" if not debug else "cpu",
         devices=1,
         logger=True,
-        max_epochs=500,
+        max_epochs=500 if not debug else 1,
         num_sanity_val_steps=0,
         benchmark=False,
         callbacks=[
             ModelCheckpoint(
-                monitor="val_loss_mean",
+                monitor="val_" + metric_names.avg_loss,
                 dirpath=model_checkpoint_dir,
                 filename=model_checkpoint_filename,
                 save_top_k=3,
                 mode="min",
             ),
             ModelCheckpoint(
-                monitor="val_map_50_95",
+                monitor="val_" + metric_names.map_50_95,
                 dirpath=model_checkpoint_dir,
                 filename=model_checkpoint_filename,
                 save_top_k=3,

@@ -1,0 +1,5 @@
+map_50_95 = "mAP_0.5_0.95"
+map_50 = "mAP_0.5"
+map_75 = "mAP_0.75"
+loss = "loss"
+avg_loss = "loss_mean"
