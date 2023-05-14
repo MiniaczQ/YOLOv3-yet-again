@@ -36,6 +36,7 @@ class YoloV3Module(pl.LightningModule):
         loss_noobj_coeff=100,
         conf_threshold=0.5,
         iou_threshold=0.5,
+        ignore_threshold=0.7,
         freeze_backbone=True
     ):
         super().__init__()
@@ -60,6 +61,7 @@ class YoloV3Module(pl.LightningModule):
         )
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
+        self.ignore_threshold = ignore_threshold
 
         self.model = YOLOv3(num_classes)
         if num_classes == 80:
@@ -86,7 +88,6 @@ class YoloV3Module(pl.LightningModule):
         outputs: torch.Tensor,
         annotations: torch.Tensor,
         anchors: torch.Tensor,
-        ignore_thresh: float = 0.7,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         output_size = outputs.shape
         batch_size = output_size[0]
@@ -105,13 +106,13 @@ class YoloV3Module(pl.LightningModule):
         # clamp prevents some weird indices on CUDA (e.g. 174725728)
         col, row = xy.long().clamp(0, grid_size - 1).t()
 
-        def _xywh_from_wh(t: torch.Tensor) -> torch.Tensor:
+        def _cxcywh_from_wh(t: torch.Tensor) -> torch.Tensor:
             return torch.cat(
                 (torch.zeros(t.shape, device=self.device, requires_grad=True), t),
                 dim=-1,
             )
 
-        def _x1y1x2y2_from_xywh(xywh: torch.Tensor) -> torch.Tensor:
+        def _xyxy_from_cxcywh(xywh: torch.Tensor) -> torch.Tensor:
             return torch.cat(
                 (xywh[..., :2] - xywh[..., 2:] / 2, xywh[..., :2] + xywh[..., 2:] / 2),
                 -1,
@@ -120,10 +121,10 @@ class YoloV3Module(pl.LightningModule):
         wh_iou_per_anchor = torch.stack(
             [
                 box_iou(
-                    _x1y1x2y2_from_xywh(
-                        _xywh_from_wh(anchor.repeat(len(annotations), 1))
+                    _xyxy_from_cxcywh(
+                        _cxcywh_from_wh(anchor.repeat(len(annotations), 1))
                     ),
-                    _x1y1x2y2_from_xywh(_xywh_from_wh(wh)),
+                    _xyxy_from_cxcywh(_cxcywh_from_wh(wh)),
                 ).diag()
                 for anchor in anchors
             ],
@@ -133,7 +134,9 @@ class YoloV3Module(pl.LightningModule):
         obj_mask[image_batch_ids, best_anchors, row, col] = 1
         noobj_mask = ~obj_mask
         for ious in wh_iou_per_anchor:
-            noobj_mask[image_batch_ids, :, row, col][:, ious > ignore_thresh, ...] = 0
+            noobj_mask[image_batch_ids, :, row, col][
+                :, ious > self.ignore_threshold, ...
+            ] = 0
 
         processed[image_batch_ids, best_anchors, row, col, :2] = xy - xy.floor()
         processed[image_batch_ids, best_anchors, row, col, 2:4] = torch.log(
@@ -227,8 +230,6 @@ class YoloV3Module(pl.LightningModule):
 
     def training_step(self, batch: list, batch_idx: int):
         loss, _, _, _, _ = self._common_step(batch, batch_idx)
-        # with open("./total_loss_grad_graph.txt", "w") as f:
-        #     f.write(torchviz.make_dot(total_loss).__str__())
         return {metric_names.loss: loss}
 
     def training_epoch_end(self, outs):
