@@ -1,14 +1,15 @@
+from argparse import ArgumentParser, FileType
+from datetime import datetime
+from multiprocessing import cpu_count
 from typing import IO, Optional, Union
+
 from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
+
 from datamodule import DataModule
-from yolov3 import YoloV3Module
-from lightning.pytorch.callbacks import ModelCheckpoint
-from datetime import datetime
-from multiprocessing import cpu_count
-from argparse import ArgumentParser, FileType
 import metric_names
+from yolov3 import YoloV3Module
 
 
 MODEL_CHECKPOINT_DIR = datetime.now().strftime("model_checkpoints/%Y-%m-%d_%H-%M-%S")

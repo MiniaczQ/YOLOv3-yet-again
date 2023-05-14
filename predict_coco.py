@@ -1,13 +1,15 @@
 from argparse import ArgumentParser
+from datamodule import DataModule
 from datetime import datetime
+
 from lightning import Trainer
 import torch
 from torch.utils.data import DataLoader
-from datamodule import DataModule
-from yolov3 import YoloV3Module
+
+import coco_labels
 from display import output_results
 from simple_dataset import SimpleDataset
-import coco_labels
+from yolov3 import YoloV3Module
 
 
 OUTPUT_DIR = datetime.now().strftime("./detection_results/coco/%Y-%m-%d_%H-%M-%S")

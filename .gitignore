@@ -164,4 +164,3 @@ pretrained_weights
 detection_results
 model_checkpoints
 lightning_logs
-test*

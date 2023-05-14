@@ -1,21 +1,12 @@
 import lightning as pl
-
 import numpy as np
-
 import torch
-
+from torch import Generator
 from torch.utils.data import random_split, DataLoader, ConcatDataset, Dataset
-
 from torchvision import transforms
 
-from torch import Generator
-
 from pklot_dataset import PkLotDataset
-
-
 from processing import PadToSquare, ResizeKeepRatio, NormalizeBbox
-
-import pklot_preprocessor
 
 
 class DataModule(pl.LightningDataModule):

@@ -1,10 +1,12 @@
+from argparse import ArgumentParser, FileType
 from multiprocessing import cpu_count
 from typing import IO, Union
+
 from lightning import Trainer
+import torch
+
 from datamodule import DataModule
 from yolov3 import YoloV3Module
-import torch
-from argparse import ArgumentParser, FileType
 
 
 def main(loaded_checkpoint_path: Union[str, IO], debug=False):

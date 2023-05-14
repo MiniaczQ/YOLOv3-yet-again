@@ -1,13 +1,14 @@
-from os import makedirs
-from pathlib import Path
-from PIL import ImageDraw
-from torch import Tensor
-from shutil import rmtree
 import colorsys
+from os import makedirs
 import math
+from PIL import ImageDraw
+from pathlib import Path
+from shutil import rmtree
+
 import matplotlib.pyplot as pt
 import matplotlib as mpl
 import torch
+from torch import Tensor
 
 
 # Clamp rectangles within another rectangle

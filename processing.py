@@ -1,9 +1,9 @@
+import torch
 from torch import Tensor
 import torch.nn.functional as F
-import torchvision.transforms.functional as TF
-import torch
-from torchvision.ops import nms, box_iou
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
+import torchvision.transforms.functional as TF
+from torchvision.ops import nms, box_iou
 
 
 # Squares off the image with padding

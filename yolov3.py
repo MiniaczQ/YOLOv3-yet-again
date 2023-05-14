@@ -1,21 +1,22 @@
-from itertools import chain
 from typing import Optional
-from model_loader import load_model_from_file
-from modules import YOLOv3
-import lightning as pl
 from sys import float_info
+
+import lightning as pl
 import torch
 from torch import Tensor
 import torch.nn.functional as F
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from torchvision.ops import box_iou
+
+import metric_names
+from model_loader import load_model_from_file
+from modules import YOLOv3
 from processing import (
     non_max_supression,
     process_anchor,
     normalize_model_output,
     update_map,
 )
-from torchmetrics.detection.mean_ap import MeanAveragePrecision
-import metric_names
 
 
 # YOLOv3 module with pre- and postprocessing

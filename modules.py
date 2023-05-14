@@ -1,4 +1,3 @@
-import torch
 from torch import nn, cat
 import torch.nn.functional as F
 

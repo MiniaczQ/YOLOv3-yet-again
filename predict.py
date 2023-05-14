@@ -1,12 +1,14 @@
-from datetime import datetime
-from typing import IO, Union
-from lightning import Trainer
-from datamodule import DataModule
-from multiprocessing import cpu_count
-from yolov3 import YoloV3Module
-from display import output_results
-import torch
 from argparse import ArgumentParser, FileType
+from datetime import datetime
+from multiprocessing import cpu_count
+from typing import IO, Union
+
+from lightning import Trainer
+import torch
+
+from datamodule import DataModule
+from display import output_results
+from yolov3 import YoloV3Module
 
 
 OUTPUT_DIR = datetime.now().strftime("./detection_results/pklot/%Y-%m-%d_%H-%M-%S")
