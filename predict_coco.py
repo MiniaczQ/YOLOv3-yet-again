@@ -42,6 +42,6 @@ def main(debug=False, show_num=0):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-d", "--debug", action="store_true")
-    parser.add_argument("-n", "--shownum", type=int)
+    parser.add_argument("-n", "--shownum", type=int, default=0)
     args = parser.parse_args()
     main(args.debug, args.shownum)

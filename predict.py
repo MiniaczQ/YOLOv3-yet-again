@@ -40,6 +40,6 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("loaded_checkpoint", type=FileType("rb"))
     parser.add_argument("-d", "--debug", action="store_true")
-    parser.add_argument("-n", "--shownum", type=int)
+    parser.add_argument("-n", "--shownum", type=int, default=0)
     args = parser.parse_args()
     main(args.loaded_checkpoint, args.debug, args.shownum)
