@@ -1,13 +1,14 @@
-from os import makedirs
-from pathlib import Path
-from PIL import ImageDraw
-from torch import Tensor
-from shutil import rmtree
 import colorsys
+from os import makedirs
 import math
+from PIL import ImageDraw
+from pathlib import Path
+from shutil import rmtree
+
 import matplotlib.pyplot as pt
 import matplotlib as mpl
 import torch
+from torch import Tensor
 
 
 # Clamp rectangles within another rectangle
@@ -110,7 +111,7 @@ def output_results(
         for batch in results:
             for path, predictions, raw_image in zip(*batch):
                 if flatten_output:
-                    path = Path(path).parts.join("__")
+                    path = "__".join(Path(path).parts)
                 # Calculate padding of the image so we can reverse it
                 ow, oh = raw_image.width, raw_image.height
                 om = max(ow, oh)

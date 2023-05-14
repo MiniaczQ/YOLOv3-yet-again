@@ -1,11 +1,11 @@
+from pathlib import Path
+from PIL import Image
+
 import torch
 from torch.utils.data import Dataset
-from PIL import Image
-from pathlib import Path
-
 from torchvision import transforms
 
-from processing import ResizeKeepRatio, PadToSquare
+from .processing import ResizeKeepRatio, PadToSquare
 
 
 # Simple dataset for testing

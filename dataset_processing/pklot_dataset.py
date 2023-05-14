@@ -1,8 +1,9 @@
-from torch.utils.data import Dataset
-from PIL import Image
 from pathlib import Path
-import xml.etree.ElementTree as ET
+from PIL import Image
+
 import torch
+from torch.utils.data import Dataset
+
 
 # Load PKLot with labels
 class PkLotDataset(Dataset):

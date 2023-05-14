@@ -1,15 +1,14 @@
-from torch.utils.data import Dataset
-from PIL import Image
+from os import remove
 from pathlib import Path
 import xml.etree.ElementTree as ET
+
 import torch
-import numpy as np
-from os import remove
 
 
 # Preprocess PKLot labels
 # Skip invalid box definitions, not all visible parking spaces are labeled anyways
 # Labels are saved as .data files with tensor([[occupied, min_x, min_y, max_x, max_y]]) format
+# TODO run automatically if needed
 def preprocess(root, silent=True, remove_old=False):
     if remove_old:
         for file in Path(root).rglob("*.data"):

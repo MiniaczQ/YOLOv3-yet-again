@@ -1,33 +1,57 @@
-from model_loader import load_model_from_file
-from modules import YOLOv3
-import lightning as pl
+from typing import Optional
 from sys import float_info
+
+import lightning as pl
 import torch
 from torch import Tensor
 import torch.nn.functional as F
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from torchvision.ops import box_iou
-from processing import (
-    calculate_map,
+
+import model.metric_names as metric_names
+from .model_loader import load_model_from_file
+from .modules import YOLOv3
+from .processing import (
     non_max_supression,
     process_anchor,
     normalize_model_output,
-    process_output_without_sigmoid,
+    update_map,
 )
 
 
 # YOLOv3 module with pre- and postprocessing
 class YoloV3Module(pl.LightningModule):
+    FULL_YOLO_WEIGHTS_PATH = "./pretrained_weights/yolov3.weights"
+    DARKNET53_74_WEIGHTS_PATH = "./pretrained_weights/darknet53.conv.74"
+
     def __init__(
         self,
         num_classes=2,
         input_size=416,
         anchors: Tensor | None = None,
+        *,
         learning_rate=0.001,
+        momentum=0.9,
+        weight_decay=0.0005,
+        loss_obj_coeff=1,
+        loss_noobj_coeff=100,
+        conf_threshold=0.5,
+        iou_threshold=0.5,
+        ignore_threshold=0.7,
+        freeze_backbone=True
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.learning_rate = learning_rate
+
         self.num_classes = num_classes
+        self.input_size = input_size
+        self.size_limits = (2, input_size)
+
+        self.learning_rate = learning_rate
+        self.momentum = momentum
+        self.weight_decay = weight_decay
+        self.loss_obj_coeff = loss_obj_coeff
+        self.loss_noobj_coeff = loss_noobj_coeff
         self.anchors = anchors or torch.tensor(
             [
                 [[10, 13], [16, 30], [33, 23]],
@@ -36,23 +60,24 @@ class YoloV3Module(pl.LightningModule):
             ],
             dtype=torch.float32,
         )
-        self.head_names = ("x52", "x26", "x13")
-        self.conf_threshold = 0.5
-        self.iou_threshold = 0.5
-        self.input_size = input_size
-        self.size_limits = (2, input_size)
+        self.conf_threshold = conf_threshold
+        self.iou_threshold = iou_threshold
+        self.ignore_threshold = ignore_threshold
 
         self.model = YOLOv3(num_classes)
         if num_classes == 80:
-            load_model_from_file(self.model, "pretrained_weights/yolov3.weights")
+            load_model_from_file(self.model, YoloV3Module.FULL_YOLO_WEIGHTS_PATH)
         else:
             load_model_from_file(
-                self.model.backbone, "pretrained_weights/darknet53.conv.74"
+                self.model.backbone, YoloV3Module.DARKNET53_74_WEIGHTS_PATH
             )
-        for p in self.model.backbone.parameters():
-            p.requires_grad = False
+        if freeze_backbone:
+            for p in self.model.backbone.parameters():
+                p.requires_grad = False
 
-        self.epoch_train_loss_sum = 0
+        self.head_names = ("x52", "x26", "x13")
+        self.validation_map: Optional[MeanAveragePrecision] = None
+        self.test_map: Optional[MeanAveragePrecision] = None
 
     def forward(self, x):
         return self.model(x)
@@ -64,7 +89,6 @@ class YoloV3Module(pl.LightningModule):
         outputs: torch.Tensor,
         annotations: torch.Tensor,
         anchors: torch.Tensor,
-        ignore_thresh: float = 0.7,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         output_size = outputs.shape
         batch_size = output_size[0]
@@ -83,13 +107,13 @@ class YoloV3Module(pl.LightningModule):
         # clamp prevents some weird indices on CUDA (e.g. 174725728)
         col, row = xy.long().clamp(0, grid_size - 1).t()
 
-        def _xywh_from_wh(t: torch.Tensor) -> torch.Tensor:
+        def _cxcywh_from_wh(t: torch.Tensor) -> torch.Tensor:
             return torch.cat(
                 (torch.zeros(t.shape, device=self.device, requires_grad=True), t),
                 dim=-1,
             )
 
-        def _x1y1x2y2_from_xywh(xywh: torch.Tensor) -> torch.Tensor:
+        def _xyxy_from_cxcywh(xywh: torch.Tensor) -> torch.Tensor:
             return torch.cat(
                 (xywh[..., :2] - xywh[..., 2:] / 2, xywh[..., :2] + xywh[..., 2:] / 2),
                 -1,
@@ -98,10 +122,10 @@ class YoloV3Module(pl.LightningModule):
         wh_iou_per_anchor = torch.stack(
             [
                 box_iou(
-                    _x1y1x2y2_from_xywh(
-                        _xywh_from_wh(anchor.repeat(len(annotations), 1))
+                    _xyxy_from_cxcywh(
+                        _cxcywh_from_wh(anchor.repeat(len(annotations), 1))
                     ),
-                    _x1y1x2y2_from_xywh(_xywh_from_wh(wh)),
+                    _xyxy_from_cxcywh(_cxcywh_from_wh(wh)),
                 ).diag()
                 for anchor in anchors
             ],
@@ -111,7 +135,9 @@ class YoloV3Module(pl.LightningModule):
         obj_mask[image_batch_ids, best_anchors, row, col] = 1
         noobj_mask = ~obj_mask
         for ious in wh_iou_per_anchor:
-            noobj_mask[image_batch_ids, :, row, col][:, ious > ignore_thresh, ...] = 0
+            noobj_mask[image_batch_ids, :, row, col][
+                :, ious > self.ignore_threshold, ...
+            ] = 0
 
         processed[image_batch_ids, best_anchors, row, col, :2] = xy - xy.floor()
         processed[image_batch_ids, best_anchors, row, col, 2:4] = torch.log(
@@ -134,13 +160,11 @@ class YoloV3Module(pl.LightningModule):
             F.mse_loss(predicted[..., i][mask_obj], expected[..., i][mask_obj])
             for i in range(4)
         )
-        # TODO: magic numbers - honestly I don't know what they mean yet
-        obj_coeff, noobj_coeff = 1, 100
-        loss_obj_obj = obj_coeff * F.binary_cross_entropy(
+        loss_obj_obj = self.loss_obj_coeff * F.binary_cross_entropy(
             predicted[..., 4][mask_obj].clamp(0, 1),
             expected[..., 4][mask_obj].clamp(0, 1),
         )
-        loss_obj_noobj = noobj_coeff * F.binary_cross_entropy(
+        loss_obj_noobj = self.loss_noobj_coeff * F.binary_cross_entropy(
             predicted[..., 4][mask_noobj].clamp(0, 1),
             expected[..., 4][mask_noobj].clamp(0, 1),
         )
@@ -151,8 +175,6 @@ class YoloV3Module(pl.LightningModule):
         return loss_x + loss_y + loss_w + loss_h + loss_obj + loss_cls
 
     def _common_step(self, batch: list, batch_idx: int):
-        if batch_idx == 0:
-            self.epoch_train_loss_sum = 0
         # input: transformed image
         # annotations: annotation_batch_size * (image_id, class_id, x [0..1], y [0..1], w [0..1], h [0..1])
         #     where (x, y): center, (w, h): size, [0..1] wrt width or height
@@ -209,41 +231,49 @@ class YoloV3Module(pl.LightningModule):
 
     def training_step(self, batch: list, batch_idx: int):
         loss, _, _, _, _ = self._common_step(batch, batch_idx)
-        # with open("./total_loss_grad_graph.txt", "w") as f:
-        #     f.write(torchviz.make_dot(total_loss).__str__())
-        return {"loss": loss}
+        return {metric_names.loss: loss}
 
     def training_epoch_end(self, outs):
-        avg_loss = torch.stack([out["loss"] for out in outs]).mean()
-        self.log("train_loss_mean", avg_loss)
+        avg_loss = torch.stack([out[metric_names.loss] for out in outs]).mean()
+        self.log("train_" + metric_names.avg_loss, avg_loss)
+
+    def on_validation_epoch_start(self):
+        self.validation_map = MeanAveragePrecision()
 
     def validation_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
             loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
-            if batch_idx == 0:
-                all_maps = calculate_map(results, annotations)
-                self.log("val_map_50", all_maps["map_50"], on_epoch=True)
-                self.log("val_map_75", all_maps["map_75"], on_epoch=True)
-                self.log("val_map_50_95", all_maps["map"], on_epoch=True)
-            return {"val_loss": loss}
+        update_map(self.validation_map, results, annotations)
+        return {"val_" + metric_names.loss: loss}
 
     def validation_epoch_end(self, outs):
-        avg_loss = torch.stack([out["val_loss"] for out in outs]).mean()
-        self.log("val_loss_mean", avg_loss)
+        prefix = "val_"
+        avg_loss = torch.stack([out[prefix + metric_names.loss] for out in outs]).mean()
+        all_maps = self.validation_map.compute()
+        self.validation_map = None
+        self.log(prefix + metric_names.map_50, all_maps["map_50"])
+        self.log(prefix + metric_names.map_75, all_maps["map_75"])
+        self.log(prefix + metric_names.map_50_95, all_maps["map"])
+        self.log(prefix + metric_names.avg_loss, avg_loss)
+
+    def on_test_epoch_start(self):
+        self.test_map = MeanAveragePrecision()
 
     def test_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
             loss, results, annotations, _, _ = self._common_step(batch, batch_idx)
-            if batch_idx == 0:
-                all_maps = calculate_map(results, annotations)
-                self.log("test_map_50", all_maps["map_50"], on_epoch=True)
-                self.log("test_map_75", all_maps["map_75"], on_epoch=True)
-                self.log("test_map_50_95", all_maps["map"], on_epoch=True)
-            return {"test_loss": loss}
+        update_map(self.test_map, results, annotations)
+        return {"test_" + metric_names.loss: loss}
 
     def test_epoch_end(self, outs):
-        avg_loss = torch.stack([out["test_loss"] for out in outs]).mean()
-        self.log("test_loss_mean", avg_loss)
+        prefix = "test_"
+        avg_loss = torch.stack([out[prefix + metric_names.loss] for out in outs]).mean()
+        all_maps = self.test_map.compute()
+        self.test_map = None
+        self.log(prefix + metric_names.map_50, all_maps["map_50"])
+        self.log(prefix + metric_names.map_75, all_maps["map_75"])
+        self.log(prefix + metric_names.map_50_95, all_maps["map"])
+        self.log(prefix + metric_names.avg_loss, avg_loss)
 
     def predict_step(self, batch, batch_idx):
         with torch.no_grad():
@@ -251,7 +281,10 @@ class YoloV3Module(pl.LightningModule):
         return paths, results, raw_images
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(
-            self.parameters(), lr=self.learning_rate, weight_decay=0.0005
+        optimizer = torch.optim.SGD(
+            self.parameters(),
+            lr=self.learning_rate,
+            momentum=self.momentum,
+            weight_decay=self.weight_decay,
         )
         return optimizer

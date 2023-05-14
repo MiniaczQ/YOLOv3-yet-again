@@ -1,9 +1,8 @@
 # Roughly based on https://www.programcreek.com/python/?CodeExample=load+darknet+weights
-from torch import nn, no_grad, from_numpy
 import numpy as np
+from torch import nn, no_grad, from_numpy
 
-
-from modules import Darknet53Conv, YOLOv3
+from .modules import Darknet53Conv, YOLOv3
 
 
 # Fill model with weights stored in a file
