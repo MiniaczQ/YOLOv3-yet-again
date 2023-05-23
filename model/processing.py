@@ -116,7 +116,7 @@ def non_max_supression(bpreds: Tensor, conf_threshold, size_limits, iou_threshol
 # Targets as:
 # batch[prediction[img_id, class, x, y, w, h]]
 # Because no time to refactor
-def update_map(map: MeanAveragePrecision, batch_preds: list, batch_targs: torch.tensor):
+def update_map(map: MeanAveragePrecision, batch_preds: list, batch_targs: torch.Tensor):
     # Process targets to the same format as predictions
     batch_targs = _xywh_to_rect(batch_targs[:, [2, 3, 4, 5, 1, 0]])
     batch_targs[:, [0, 1, 2, 3]] *= 416

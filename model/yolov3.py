@@ -89,7 +89,7 @@ class YoloV3Module(pl.LightningModule):
         outputs: torch.Tensor,
         annotations: torch.Tensor,
         anchors: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         output_size = outputs.shape
         batch_size = output_size[0]
         grid_size = output_size[2]
