@@ -7,18 +7,21 @@ from torch.utils.data import Dataset
 
 # Load PKLot with labels
 class PkLotDataset(Dataset):
-    def __init__(self, root, img_transform=None, ann_transform=None):
+    def __init__(self, root, img_transform=None, ann_transform=None, *, load_images=True):
         self.root = Path(root)
         self.ann_paths = list(self.root.rglob("*.data"))
         self.img_transform = img_transform
         self.ann_transform = ann_transform
+        self.load_images = load_images
 
     def __getitem__(self, i):
         data_paths = self.ann_paths[i]
         img_path = data_paths.with_suffix(".jpg")
-        img = raw_img = Image.open(img_path).convert("RGB")
-        if self.img_transform is not None:
-            img = self.img_transform(img)
+        img = raw_img = None
+        if self.load_images:
+            img = raw_img = Image.open(img_path).convert("RGB")
+            if self.img_transform is not None:
+                img = self.img_transform(img)
 
         ann = torch.load(data_paths)
         if self.ann_transform is not None:
