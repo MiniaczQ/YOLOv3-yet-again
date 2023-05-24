@@ -67,8 +67,13 @@ def main(
         else None,
     )
 
+    anchors = torch.tensor([
+        [[12, 14], [13, 17], [15, 15]],
+        [[17, 19], [23, 20], [27, 25]],
+        [[30, 15], [38, 21], [48, 36]],
+    ])
     model = (
-        YoloV3Module(2)
+        YoloV3Module(2, anchors=anchors)
         if loaded_checkpoint_path is None
         else YoloV3Module.load_from_checkpoint(loaded_checkpoint_path)
     )
