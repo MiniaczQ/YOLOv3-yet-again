@@ -76,8 +76,8 @@ class YoloV3Module(pl.LightningModule):
                 p.requires_grad = False
 
         self.head_names = ("x52", "x26", "x13")
-        self.validation_map: Optional[MeanAveragePrecision] = None
-        self.test_map: Optional[MeanAveragePrecision] = None
+        self.validation_map = MeanAveragePrecision()
+        self.test_map = MeanAveragePrecision()
 
     def forward(self, x):
         return self.model(x)
@@ -238,7 +238,7 @@ class YoloV3Module(pl.LightningModule):
         self.log("train_" + metric_names.avg_loss, avg_loss)
 
     def on_validation_epoch_start(self):
-        self.validation_map = MeanAveragePrecision()
+        self.validation_map.reset()
 
     def validation_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
@@ -250,14 +250,13 @@ class YoloV3Module(pl.LightningModule):
         prefix = "val_"
         avg_loss = torch.stack([out[prefix + metric_names.loss] for out in outs]).mean()
         all_maps = self.validation_map.compute()
-        self.validation_map = None
         self.log(prefix + metric_names.map_50, all_maps["map_50"])
         self.log(prefix + metric_names.map_75, all_maps["map_75"])
         self.log(prefix + metric_names.map_50_95, all_maps["map"])
         self.log(prefix + metric_names.avg_loss, avg_loss)
 
     def on_test_epoch_start(self):
-        self.test_map = MeanAveragePrecision()
+        self.test_map.reset()
 
     def test_step(self, batch: list, batch_idx: int):
         with torch.no_grad():
@@ -269,7 +268,6 @@ class YoloV3Module(pl.LightningModule):
         prefix = "test_"
         avg_loss = torch.stack([out[prefix + metric_names.loss] for out in outs]).mean()
         all_maps = self.test_map.compute()
-        self.test_map = None
         self.log(prefix + metric_names.map_50, all_maps["map_50"])
         self.log(prefix + metric_names.map_75, all_maps["map_75"])
         self.log(prefix + metric_names.map_50_95, all_maps["map"])

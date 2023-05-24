@@ -1,8 +1,7 @@
 import lightning as pl
-import numpy as np
 import torch
 from torch import Generator
-from torch.utils.data import random_split, DataLoader, ConcatDataset, Dataset
+from torch.utils.data import random_split, DataLoader, ConcatDataset, Dataset, Subset
 from torchvision import transforms
 
 from .pklot_dataset import PkLotDataset
@@ -60,7 +59,7 @@ class DataModule(pl.LightningDataModule):
 
         if self.size_limit > 0:
 
-            def _split_size_limit(dataset: Dataset):
+            def _split_size_limit(dataset: Subset):
                 sample_count = self.size_limit * self.batch_size
 
                 return random_split(
