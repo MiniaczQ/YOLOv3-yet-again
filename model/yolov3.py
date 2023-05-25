@@ -10,7 +10,7 @@ from torchvision.ops import box_iou
 
 import model.metric_names as metric_names
 from .model_loader import load_model_from_file
-from .modules import YOLOv3
+from .modules import YOLOv3, PANetYOLOv3
 from .processing import (
     non_max_supression,
     process_anchor,
@@ -38,7 +38,8 @@ class YoloV3Module(pl.LightningModule):
         conf_threshold=0.5,
         iou_threshold=0.5,
         ignore_threshold=0.7,
-        freeze_backbone=True
+        freeze_backbone=True,
+        panet=False,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -64,7 +65,11 @@ class YoloV3Module(pl.LightningModule):
         self.iou_threshold = iou_threshold
         self.ignore_threshold = ignore_threshold
 
-        self.model = YOLOv3(num_classes)
+        if panet:
+            self.model = PANetYOLOv3(num_classes)
+        else:
+            self.model = YOLOv3(num_classes)
+
         if num_classes == 80:
             load_model_from_file(self.model, YoloV3Module.FULL_YOLO_WEIGHTS_PATH)
         else:
