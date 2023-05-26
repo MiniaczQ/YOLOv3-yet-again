@@ -33,10 +33,9 @@ def unpad(rects: Tensor, padding):
 
 
 # Represent confidence in percentage and turn predictions into integer lists
-def finalize_predictions(preds: Tensor):
+def finalize_predictions(preds: Tensor) -> list[int]:
     preds[..., 4] *= 100
-    preds = preds.int().tolist()
-    return preds
+    return preds.int().tolist()
 
 
 # Print a prediction to console
@@ -61,12 +60,12 @@ C_CLASS = lambda id: tuple(
 
 
 # Draw a single prediction onto the image
-def draw_prediction(draw: ImageDraw.ImageDraw, pred, label):
+def draw_prediction(draw: ImageDraw.ImageDraw, pred: list[int], label):
     text = f"{label} {pred[4]/100:4.2}"
     (tx, ty) = draw.textsize(text)
     rect_color = C_CLASS(pred[5])
     draw.rectangle((pred[0], pred[1], pred[0] + tx, pred[1] + ty), rect_color)
-    draw.rectangle([(pred[0], pred[1]), (pred[2], pred[3])], outline=rect_color)
+    draw.rectangle(((pred[0], pred[1]), (pred[2], pred[3])), outline=rect_color)
     draw.text((pred[0], pred[1]), text, C_WHITE)
 
 

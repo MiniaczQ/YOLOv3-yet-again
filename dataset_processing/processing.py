@@ -47,15 +47,6 @@ class NormalizeBbox:
         self.image_size = image_size
         self.padded = padded
 
-    @staticmethod
-    def _map_linearly(
-        x: torch.Tensor, in_range: tuple[float, float], out_range: tuple[float, float]
-    ):
-        assert in_range[1] > in_range[0]
-        assert out_range[1] > out_range[0]
-        scale = (out_range[1] - out_range[0]) / (in_range[1] - in_range[0])
-        return (x - in_range[0]) * scale + out_range[0]
-
     def __call__(self, annotation: torch.Tensor) -> torch.Tensor:
         annotation = annotation.clone().float()
         sizes = annotation[..., 3:5] - annotation[..., 1:3]
@@ -66,6 +57,6 @@ class NormalizeBbox:
             padding = torch.tensor([0, size_diff])
         else:
             padding = torch.tensor([size_diff, 0])
-        annotation[..., 1:3] = annotation[..., 1:3] + padding
+        annotation[..., 1:3] = annotation[..., 1:3] + (padding if self.padded else 0)
         annotation[..., 1:] = annotation[..., 1:] / max_size
         return annotation

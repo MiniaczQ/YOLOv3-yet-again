@@ -26,14 +26,14 @@ def load_model(model, weights):
 def load_module(module: nn.Module, weights):
     total = 0
     match module:
-        case conv if isinstance(module, Darknet53Conv):
+        case Darknet53Conv() as conv:
             total += load_darknet53_conv(conv, weights[total:])
-        case conv2d if isinstance(module, nn.Conv2d):
+        case nn.Conv2d() as conv2d:
             total += load_conv2d(conv2d, weights[total:])
-        case batch_norm2d if isinstance(module, nn.BatchNorm2d):
+        case nn.BatchNorm2d() as batch_norm2d:
             total += load_batch_norm2d(batch_norm2d, weights[total:])
-        case yolov3 if isinstance(yolov3, YOLOv3):
-            total += load_yolov3(batch_norm2d, weights[total:])
+        case YOLOv3() as yolov3:
+            total += load_yolov3(yolov3, weights[total:])
         case module:
             for submodule in module.children():
                 total += load_module(submodule, weights[total:])

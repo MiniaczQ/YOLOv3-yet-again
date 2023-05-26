@@ -6,6 +6,10 @@ import xml.etree.ElementTree as ET
 import torch
 
 
+IMAGE_WIDTH = 1280
+IMAGE_HEIGHT = 720
+
+
 # Preprocess PKLot labels
 # Skip invalid box definitions, not all visible parking spaces are labeled anyways
 # Labels are saved as .data files with tensor([[occupied, min_x, min_y, max_x, max_y]]) format
@@ -30,21 +34,20 @@ def preprocess(root, silent=True, remove_old=False):
                 try:
                     occupied = int(space.attrib["occupied"])
                 except:
-                    print(
-                        f"\tSkipping bbox without occupied attribute for image {image}"
-                    )
+                    print(f"\tSkipping bbox without occupied attribute for image {image}")
                     continue
                 any_point_found = False
-                min_x, min_y = 2**31 - 1, 2**31 - 1
+                min_x, min_y = IMAGE_WIDTH - 1, IMAGE_HEIGHT - 1
                 max_x, max_y = 0, 0
-                for point in space.find("contour").iterfind("point"):
-                    any_point_found = True
-                    x = int(point.attrib["x"])
-                    min_x = min(min_x, x)
-                    max_x = max(max_x, x)
-                    y = int(point.attrib["y"])
-                    min_y = min(min_y, y)
-                    max_y = max(max_y, y)
+                if (contour := space.find("contour")) is not None:
+                    for point in contour.iterfind("point"):
+                        any_point_found = True
+                        x = int(point.attrib["x"])
+                        min_x = min(min_x, x)
+                        max_x = max(max_x, x)
+                        y = int(point.attrib["y"])
+                        min_y = min(min_y, y)
+                        max_y = max(max_y, y)
                 if any_point_found:
                     data.append([occupied, min_x, min_y, max_x, max_y])
         except Exception as e:
