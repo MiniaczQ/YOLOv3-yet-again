@@ -6,4 +6,4 @@
 
 ## Network
 
-![network](net.svg)
+![network](net.png)
