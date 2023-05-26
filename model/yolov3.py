@@ -52,7 +52,7 @@ class YoloV3Module(pl.LightningModule):
         self.weight_decay = weight_decay
         self.loss_obj_coeff = loss_obj_coeff
         self.loss_noobj_coeff = loss_noobj_coeff
-        self.anchors = anchors or torch.tensor(
+        self.anchors = anchors if anchors is not None else torch.tensor(
             [
                 [[10, 13], [16, 30], [33, 23]],
                 [[30, 61], [62, 45], [59, 119]],
