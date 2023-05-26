@@ -138,9 +138,9 @@ class FeaturePyramid(nn.Module):
         super().__init__()  # 13x13
         self.conv1 = FeaturePyramidConv(1024, 512)
         self.upsample1 = FeaturePyramidUpsample(512)  # 26x26
-        self.conv2 = FeaturePyramidConv(768, 256)
+        self.conv2 = FeaturePyramidConv(512 + 256, 256)
         self.upsample2 = FeaturePyramidUpsample(256)  # 52x52
-        self.conv3 = FeaturePyramidConv(384, 128)
+        self.conv3 = FeaturePyramidConv(256 + 128, 128)
 
     def forward(self, x):
         (x52, x26, x13) = x
@@ -171,6 +171,53 @@ class YOLOv3(nn.Module):
     def forward(self, x):
         (x52, x26, x13) = self.backbone(x)
         (x52, x26, x13) = self.neck((x52, x26, x13))
+        x13 = self.head1(x13)
+        x26 = self.head2(x26)
+        x52 = self.head3(x52)
+        return x52, x26, x13
+
+
+# PANet module
+class PathAggregation(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = Darknet53Conv(128, 128, 3, 1)  # 52x52
+        self.downscale1 = Darknet53Conv(128, 256, 3, 2)
+        self.conv2 = Darknet53Conv(512, 256, 3, 1)  # 26x26
+        self.downscale2 = Darknet53Conv(256, 512, 3, 2)
+        self.conv3 = Darknet53Conv(1024, 512, 3, 1)  # 13x13
+
+    def forward(self, x):
+        (x52, x26, x13) = x
+        x = x52
+        x = self.conv1(x)
+        x52 = x
+        x = self.downscale1(x)
+        x = cat((x, x26), dim=1)
+        x = self.conv2(x)
+        x26 = x
+        x = self.downscale2(x)
+        x = cat((x, x13), dim=1)
+        x = self.conv3(x)
+        x13 = x
+        return x52, x26, x13
+
+
+# YOLOv3 module with PANet
+class PANetYOLOv3(nn.Module):
+    def __init__(self, num_classes: int):
+        super().__init__()
+        self.backbone = Darknet53()
+        self.neck1 = FeaturePyramid()
+        self.neck2 = PathAggregation()
+        self.head1 = YOLOv3Head(512, num_classes)
+        self.head2 = YOLOv3Head(256, num_classes)
+        self.head3 = YOLOv3Head(128, num_classes)
+
+    def forward(self, x):
+        (x52, x26, x13) = self.backbone(x)
+        (x52, x26, x13) = self.neck1((x52, x26, x13))
+        (x52, x26, x13) = self.neck2((x52, x26, x13))
         x13 = self.head1(x13)
         x26 = self.head2(x26)
         x52 = self.head3(x52)

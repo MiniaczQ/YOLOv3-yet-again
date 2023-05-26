@@ -27,6 +27,7 @@ def main(
     dataset_root="./data/PKLot",
     max_epochs=500,
     debug=False,
+    panet=False,
 ):
     if debug:
         torch.manual_seed(0)
@@ -67,13 +68,15 @@ def main(
         else None,
     )
 
-    anchors = torch.tensor([
-        [[12, 14], [13, 17], [15, 15]],
-        [[17, 19], [23, 20], [27, 25]],
-        [[30, 15], [38, 21], [48, 36]],
-    ])
+    anchors = torch.tensor(
+        [
+            [[12, 14], [13, 17], [15, 15]],
+            [[17, 19], [23, 20], [27, 25]],
+            [[30, 15], [38, 21], [48, 36]],
+        ]
+    )
     model = (
-        YoloV3Module(2, anchors=anchors)
+        YoloV3Module(2, anchors=anchors, panet=panet)
         if loaded_checkpoint_path is None
         else YoloV3Module.load_from_checkpoint(loaded_checkpoint_path)
     )
@@ -90,5 +93,6 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, default="./data/PKLot")
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("-d", "--debug", action="store_true")
+    parser.add_argument("--panet", action="store_true")
     args = parser.parse_args()
-    main(args.loaded_checkpoint, args.dataset, args.epochs, args.debug)
+    main(args.loaded_checkpoint, args.dataset, args.epochs, args.debug, args.panet)
